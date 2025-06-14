@@ -7,6 +7,11 @@ from nltk.tokenize import word_tokenize
 # Global flag to track if NLTK data is downloaded
 _nltk_data_downloaded = False
 
+nltk.data.path.append("/tmp")
+nltk.download('punkt', download_dir='/tmp')
+nltk.download('stopwords', download_dir='/tmp')
+
+
 def ensure_nltk_data():
     """Ensure NLTK data is downloaded only once."""
     global _nltk_data_downloaded
@@ -41,7 +46,7 @@ def analyze_goals(text):
             return "⚠️ Empty goal text provided."
             
         # Tokenize and filter words
-        words = word_tokenize(text)
+        words = word_tokenize(text, language='english')
         filtered_words = [
             word for word in words
             if word.isalnum() and 
