@@ -1,36 +1,18 @@
 import re
 import nltk
-import os
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
-# Global flag to track if NLTK data is downloaded
-_nltk_data_downloaded = False
+# Set custom download path for environments like Streamlit Cloud
+NLTK_DATA_PATH = "/tmp/nltk_data"
+nltk.data.path.append(NLTK_DATA_PATH)
 
-nltk.data.path.append("/tmp")
-nltk.download('punkt', download_dir='/tmp')
-nltk.download('stopwords', download_dir='/tmp')
-
-
-def ensure_nltk_data():
-    """Ensure NLTK data is downloaded only once."""
-    global _nltk_data_downloaded
-    
-    if _nltk_data_downloaded:
-        return
-        
+# Download required resources if missing
+for resource in ['punkt', 'stopwords']:
     try:
-        # Check and download required NLTK data
-        required_data = ['punkt', 'stopwords']
-        for item in required_data:
-            try:
-                nltk.data.find(f'tokenizers/{item}' if item == 'punkt' else f'corpora/{item}')
-            except LookupError:
-                nltk.download(item, quiet=True)
-        
-        _nltk_data_downloaded = True
-    except Exception as e:
-        raise Exception(f"Failed to download NLTK data: {str(e)}")
+        nltk.data.find(f'tokenizers/{resource}' if resource == 'punkt' else f'corpora/{resource}')
+    except LookupError:
+        nltk.download(resource, download_dir=NLTK_DATA_PATH)
 
 def analyze_goals(text):
     """Analyze career goals and extract meaningful keywords."""
@@ -38,8 +20,6 @@ def analyze_goals(text):
         return "⚠️ Please provide a valid career goal text."
         
     try:
-        ensure_nltk_data()
-        
         # Clean and normalize text
         text = text.lower().strip()
         if not text:
@@ -51,7 +31,7 @@ def analyze_goals(text):
             word for word in words
             if word.isalnum() and 
             word not in stopwords.words('english') and
-            len(word) > 2  # Filter out very short words
+            len(word) > 2
         ]
         
         # Extract unique keywords
@@ -60,9 +40,9 @@ def analyze_goals(text):
         if not keywords:
             return "⚠️ No meaningful keywords extracted from your goal. Please provide more specific details."
             
-        # Format output with categories
-        tech_keywords = [k for k in keywords if any(tech in k.lower() for tech in ['dev', 'code', 'program', 'software', 'data', 'ai', 'ml', 'web', 'cloud'])]
-        role_keywords = [k for k in keywords if any(role in k.lower() for role in ['engineer', 'developer', 'architect', 'manager', 'analyst', 'designer'])]
+        # Categorize
+        tech_keywords = [k for k in keywords if any(tech in k for tech in ['dev', 'code', 'program', 'software', 'data', 'ai', 'ml', 'web', 'cloud'])]
+        role_keywords = [k for k in keywords if any(role in k for role in ['engineer', 'developer', 'architect', 'manager', 'analyst', 'designer'])]
         other_keywords = [k for k in keywords if k not in tech_keywords and k not in role_keywords]
         
         output = "🔍 Keywords extracted from your goal:\n\n"
