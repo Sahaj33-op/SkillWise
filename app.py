@@ -853,8 +853,7 @@ st.markdown("""
     </div>
     <p>© 2025 SkillWise. All rights reserved.</p>
     <p>
-        <a href="mailto:support@skillwise.local">Contact Us</a> | 
-        <a href="http://skillwise.local/terms.html" target="_blank">Terms of Service</a>
+        <a href="https://linktr.ee/sahaj33">Contact Me</a>
     </p>
 </div>
 """, unsafe_allow_html=True)
