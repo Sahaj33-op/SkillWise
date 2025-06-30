@@ -23,7 +23,7 @@ def update_progress(progress_bar, eta_placeholder, current_progress, total_stage
     eta_placeholder.text(f"⏳ {stage_name}... {int(progress)}%")
 
 # Configure Streamlit page
-st.set_page_config(page_title="SkillWise - AI Roadmap Generator", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="SkillWise", layout="wide", initial_sidebar_state="expanded")
 
 # Load external CSS
 with open('style.css') as f:
