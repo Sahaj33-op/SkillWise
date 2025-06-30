@@ -23,7 +23,7 @@ def update_progress(progress_bar, eta_placeholder, current_progress, total_stage
     eta_placeholder.text(f"⏳ {stage_name}... {int(progress)}%")
 
 # Configure Streamlit page
-st.set_page_config(page_title="SkillWise", page_icon=“💡”, layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="SkillWise", page_icon="💡", layout="wide", initial_sidebar_state="expanded")
 
 # Load external CSS
 with open('style.css') as f:
