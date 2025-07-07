@@ -1,1 +1,2 @@
-tesseract-ocr
+tesseract-ocrplotly
+pandas

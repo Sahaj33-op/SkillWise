@@ -9,10 +9,13 @@ from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
-from resume_parser import parse_resume
+from resume_parser import parse_resume, parse_linkedin_json
 from roadmap_generator import generate_roadmap
 from goal_analyzer import analyze_goals
 import google.generativeai as genai
+import plotly.express as px
+from datetime import timedelta
+from smart_gap_analyzer import get_smart_gap_analysis, SmartGapAnalysisError
 
 # Load skills data from JSON
 @st.cache_data
@@ -258,44 +261,50 @@ with tab1:
         st.session_state.custom_role = st.text_input("Please specify your role", placeholder="e.g., Game Developer", value=st.session_state.custom_role)
     effective_role = st.session_state.custom_role if st.session_state.role == "Other" and st.session_state.custom_role else st.session_state.role
     st.subheader("📄 Upload Your Resume")
-    uploaded_file = st.file_uploader("Upload your resume (PDF)", type="pdf")
+    uploaded_file = st.file_uploader("Upload your resume (PDF or LinkedIn JSON)", type=["pdf", "json"])
     
     if uploaded_file is not None and not st.session_state.is_processing:
         st.session_state.is_processing = True
-        status_container = st.empty() # Create a container for status messages and progress
+        status_container = st.empty()
         progress_bar = status_container.progress(0)
         eta_placeholder = status_container.empty()
         start_time = time.time()
-        
+        tmp_path = None # Initialize tmp_path to ensure it's always defined for finally block
+
         try:
-            # Stage 1: Validating and Uploading
+            file_type = uploaded_file.type
             update_progress(progress_bar, eta_placeholder, 0, 100, start_time, st.session_state.resume_upload_time, "Processing Resume")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                tmp_file.write(uploaded_file.read())
-                tmp_path = tmp_file.name
-            
-            # Stage 2: Parsing
-            update_progress(progress_bar, eta_placeholder, 50, 100, start_time, st.session_state.resume_upload_time, "Processing Resume")
-            parsed_text = parse_resume(tmp_path)
+
+            parsed_text = ""
+            if file_type == "application/pdf":
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                    tmp_file.write(uploaded_file.read())
+                    tmp_path = tmp_file.name
+                update_progress(progress_bar, eta_placeholder, 50, 100, start_time, st.session_state.resume_upload_time, "Parsing PDF")
+                parsed_text = parse_resume(tmp_path)
+            elif file_type == "application/json":
+                update_progress(progress_bar, eta_placeholder, 50, 100, start_time, st.session_state.resume_upload_time, "Parsing JSON")
+                json_data = json.load(uploaded_file)
+                parsed_text = parse_linkedin_json(json_data)
             
             if len(parsed_text.strip()) > 20:
                 st.session_state.parsed_resume = parsed_text
                 st.session_state.resume_text = parsed_text
-                status_container.success("✅ Resume uploaded and processed successfully!") # Use container for success message
+                status_container.success("✅ Resume processed successfully!")
             else:
-                status_container.error("⚠️ Failed to extract meaningful content. Try another resume.") # Use container for error message
+                status_container.error("⚠️ Failed to extract meaningful content. Try another file or format.")
                 
         except Exception as e:
-            status_container.error(f"❌ Error processing resume: {str(e)}") # Use container for error message
+            status_container.error(f"❌ Error processing resume: {str(e)}")
         finally:
-            try:
-                os.remove(tmp_path)
-            except:
-                pass
-            status_container.empty() # Clear the entire container
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except Exception as e:
+                    print(f"Error removing temp file: {e}") # Log error, don't crash
+            status_container.empty()
             st.session_state.is_processing = False
             
-            # Update estimated time for future uploads
             total_time = time.time() - start_time
             st.session_state.resume_upload_time = total_time
 
@@ -346,6 +355,95 @@ with tab1:
                 status_container.empty() # Clear the entire container
                 st.session_state.is_processing = False
 
+    st.markdown("---")
+    # Job Role Simulator Expander
+    with st.expander("🎯 Job Role Simulator (Optional)", expanded=False):
+        st.subheader("Simulate Your Fit for a Specific Job")
+        jd_text_input = st.text_area("Paste Job Description Text Here:", height=200, key="jd_text_input",
+                                     help="Paste the full text of the job description you are interested in.")
+        # jd_url_input = st.text_input("Or Enter Job Description URL (Experimental):", key="jd_url_input",
+        #                              help="Pasting text is more reliable. URL fetching might not always work.")
+
+        if st.button("🚀 Analyze Fit & Generate Focused Roadmap", key="analyze_jd_button"):
+            if not st.session_state.parsed_resume:
+                st.warning("⚠️ Please upload your resume first before analyzing a job description.")
+            elif not jd_text_input.strip(): # and not jd_url_input.strip()
+                st.warning("⚠️ Please paste the job description text.") # or provide a URL
+            elif not st.session_state.gemini_api_key:
+                st.error("❌ Please enter a Gemini API key in the sidebar.")
+            else:
+                job_description_content = jd_text_input.strip()
+                # if jd_url_input.strip() and not job_description_content:
+                #     with st.spinner(f"Fetching job description from URL: {jd_url_input}..."):
+                #         try:
+                #             # TODO: Implement view_text_website carefully - it's a tool call
+                #             # For now, this part is conceptual for URL fetching.
+                #             # job_description_content = view_text_website(jd_url_input) # This needs to be a tool call
+                #             st.info("URL fetching is illustrative. Actual implementation requires a tool call and error handling.")
+                #             # Simulate fetched content for now if you don't make the actual call in this step:
+                #             # job_description_content = "Simulated fetched JD content for " + jd_url_input
+                #             # st.text_area("Fetched JD (for review):", value=job_description_content, height=150, disabled=True)
+                #             pass # Placeholder for actual fetching logic
+                #         except Exception as e:
+                #             st.error(f"Failed to fetch from URL: {e}")
+                #             job_description_content = "" # Ensure it's empty on failure
+
+                if job_description_content:
+                    st.session_state.is_processing_jd = True # New state variable for JD processing
+                    jd_status_container = st.empty()
+
+                    with jd_status_container.container():
+                        st.subheader("🔍 Job Fit Analysis:")
+                        with st.spinner("Analyzing your resume against the job description..."):
+                            try:
+                                fit_analysis_prompt = (
+                                    f"My resume is:\n---\n{st.session_state.resume_text}\n---\n\n"
+                                    f"The job description is:\n---\n{job_description_content}\n---\n\n"
+                                    "Please provide a concise analysis of how well my resume matches this specific job description. "
+                                    "Highlight key strengths and specific gaps or missing qualifications relevant to this job. "
+                                    "Conclude with a percentage fit score (e.g., Fit Score: 75%)."
+                                )
+                                model = genai.GenerativeModel("gemini-1.5-flash") # Ensure model is configured
+                                response_fit = model.generate_content(fit_analysis_prompt)
+                                st.session_state.job_fit_analysis = response_fit.text.strip()
+                                st.markdown(st.session_state.job_fit_analysis)
+                            except Exception as e:
+                                st.error(f"Error during Job Fit Analysis: {e}")
+                                st.session_state.job_fit_analysis = None
+
+                        if st.session_state.job_fit_analysis:
+                            st.subheader("🗺️ Generating Focused Roadmap for this Job:")
+                            with st.spinner("Generating a new roadmap focused on this job's requirements..."):
+                                try:
+                                    focused_roadmap_prompt = (
+                                        f"My resume is:\n---\n{st.session_state.resume_text}\n---\n\n"
+                                        f"The target job description is:\n---\n{job_description_content}\n---\n\n"
+                                        f"My previous general career goal was '{st.session_state.goal}' for the role of '{effective_role}'.\n\n"
+                                        "Now, generate a highly focused 6-month learning roadmap to specifically address the gaps and requirements for THIS job description. "
+                                        "Prioritize skills and experiences mentioned in the job description. "
+                                        "Suggest concrete learning steps, resources (like specific types of courses or projects), and how they help bridge the gap for this particular job. "
+                                        "The output should be a structured roadmap."
+                                    )
+                                    # We can reuse the existing roadmap_generator.py function
+                                    focused_roadmap = generate_roadmap(focused_roadmap_prompt)
+                                    st.session_state.focused_jd_roadmap = focused_roadmap
+
+                                    # Option: Update main roadmap or show separately
+                                    # For now, let's update the main roadmap and notify the user
+                                    st.session_state.roadmap = focused_roadmap
+                                    st.success("✅ Focused roadmap generated and updated in the 'Roadmap' tab!")
+                                    # Also clear any previous smart gap analysis as the roadmap context has changed
+                                    if "smart_gap_analysis_result" in st.session_state:
+                                        del st.session_state.smart_gap_analysis_result
+                                    st.rerun() # Rerun to refresh the roadmap tab
+                                except Exception as e:
+                                    st.error(f"Error generating focused roadmap: {e}")
+                                    st.session_state.focused_jd_roadmap = None
+                    st.session_state.is_processing_jd = False
+                elif not jd_text_input.strip(): # Only show if URL was primary and failed, and text is also empty
+                     st.warning("Please paste the job description text if URL fetching failed or was not used.")
+
+
 # Roadmap Tab
 with tab2:
     if st.session_state.roadmap:
@@ -367,79 +465,422 @@ with tab2:
         else:
             st.warning("⚠️ Skill data could not be loaded. Please check 'skills_data.json'.")
 
-        if skills_to_check:
-            resume_text_lower = st.session_state.resume_text.lower()
-            matched_conceptual_skills = []
-            for conceptual_skill in skills_to_check:
-                # Get aliases for the conceptual skill, or use the skill itself if no aliases are defined
-                aliases = expanded_skill_terms.get(conceptual_skill, [conceptual_skill])
-                if any(alias.lower() in resume_text_lower for alias in aliases):
-                    matched_conceptual_skills.append(conceptual_skill)
+        # Smart AI Gap Detector
+        st.subheader("🤖 Smart AI Gap Analysis")
+        if st.session_state.resume_text and effective_role != "Select a tech role":
+            if "smart_gap_analysis_result" not in st.session_state or \
+               st.session_state.get("smart_gap_analysis_role") != effective_role or \
+               st.session_state.get("smart_gap_analysis_resume") != st.session_state.resume_text:
 
-            skill_match_score = (len(matched_conceptual_skills) / len(skills_to_check)) * 100
-            st.subheader("📊 Skill Match Score")
-            st.markdown(f"Your skills match {skill_match_score:.1f}% of the requirements for {effective_role}.")
+                # Button to trigger analysis to avoid running on every rerun if not needed
+                if st.button("🔬 Analyze My Skills with AI", key="run_smart_analysis"):
+                    with st.spinner("Performing Smart AI Gap Analysis... This may take a moment."):
+                        try:
+                            analysis_result = get_smart_gap_analysis(
+                                st.session_state.resume_text,
+                                effective_role,
+                                st.session_state.goal
+                            )
+                            st.session_state.smart_gap_analysis_result = analysis_result
+                            st.session_state.smart_gap_analysis_role = effective_role # Cache the role for which analysis was run
+                            st.session_state.smart_gap_analysis_resume = st.session_state.resume_text # Cache resume
+                            st.markdown(st.session_state.smart_gap_analysis_result)
+                        except SmartGapAnalysisError as e:
+                            st.error(f"Smart AI Gap Analysis Error: {e}")
+                            st.session_state.smart_gap_analysis_result = None # Clear previous results on error
+                        except Exception as e:
+                            st.error(f"An unexpected error occurred during analysis: {e}")
+                            st.session_state.smart_gap_analysis_result = None
+                elif "smart_gap_analysis_result" in st.session_state and st.session_state.smart_gap_analysis_result:
+                     st.markdown(st.session_state.smart_gap_analysis_result) # Show cached result
+                else:
+                    st.info("Click the button above to perform an AI-powered skill gap analysis for your selected role and uploaded resume.")
 
-            st.subheader("🔍 Skill Gap Analysis")
-            missing_conceptual_skills = [skill for skill in skills_to_check if skill not in matched_conceptual_skills]
+            elif st.session_state.smart_gap_analysis_result: # Result is cached and inputs match
+                st.markdown(st.session_state.smart_gap_analysis_result)
+            else: # Should not happen if logic is correct, but as a fallback
+                st.info("Click 'Analyze My Skills with AI' to get your smart gap analysis.")
+        else:
+            st.warning("Please upload a resume and select a target role to enable Smart AI Gap Analysis.")
 
-            if missing_conceptual_skills:
-                st.markdown(f"Skills missing for {effective_role}: {', '.join(missing_conceptual_skills)}")
-                st.subheader("📚 Recommended Courses for Skill Gaps")
-                for skill in missing_conceptual_skills:
-                    if skill in course_recommendations:
-                        st.markdown(f"- **{skill}**: {course_recommendations[skill]}")
-                    else:
-                        st.markdown(f"- **{skill}**: No specific course recommendation available. Try searching on Coursera or Udemy.")
-            else:
-                st.markdown("✅ Your resume covers all key skills for this role!")
-        st.subheader("📈 Progress Tracker")
-        load_progress()
+        st.markdown("---")
+
+        # Old keyword-based analysis (can be kept for comparison or removed)
+        # For now, I'll comment it out to prioritize the new AI analysis.
+        # if skills_to_check:
+        #     resume_text_lower = st.session_state.resume_text.lower()
+        #     matched_conceptual_skills = []
+        #     for conceptual_skill in skills_to_check:
+        #         aliases = expanded_skill_terms.get(conceptual_skill, [conceptual_skill])
+        #         if any(alias.lower() in resume_text_lower for alias in aliases):
+        #             matched_conceptual_skills.append(conceptual_skill)
+        #
+        #     skill_match_score = (len(matched_conceptual_skills) / len(skills_to_check)) * 100 if skills_to_check else 0
+        #     st.subheader("📊 Keyword-Based Skill Match Score")
+        #     st.markdown(f"Your skills match {skill_match_score:.1f}% of the keyword requirements for {effective_role}.")
+        #
+        #     st.subheader("🔍 Keyword-Based Skill Gap Analysis")
+        #     missing_conceptual_skills = [skill for skill in skills_to_check if skill not in matched_conceptual_skills]
+        #
+        #     if missing_conceptual_skills:
+        #         st.markdown(f"Skills missing (keywords): {', '.join(missing_conceptual_skills)}")
+        #         st.subheader("📚 Recommended Courses for Skill Gaps (Keyword-Based)")
+        #         for skill in missing_conceptual_skills:
+        #             if skill in course_recommendations:
+        #                 st.markdown(f"- **{skill}**: {course_recommendations[skill]}")
+        #             else:
+        #                 st.markdown(f"- **{skill}**: No specific course recommendation available. Try searching on Coursera or Udemy.")
+        #     else:
+        #         st.markdown("✅ Your resume covers all key skills for this role based on keywords!")
+        # st.markdown("---")
+
+        # Visual Timeline (Gantt Chart)
+        st.subheader("🗓️ Visual Timeline (6 Months)")
+
+        def parse_duration(duration_str):
+            """Parses duration like '(1 week)', '(3 days)' into timedelta."""
+            if not duration_str:
+                return timedelta(weeks=1) # Default duration
+            match = re.search(r'\((\d+)\s*(week|day)s?\)', duration_str, re.IGNORECASE)
+            if match:
+                value = int(match.group(1))
+                unit = match.group(2).lower()
+                if unit == "week":
+                    return timedelta(weeks=value)
+                elif unit == "day":
+                    return timedelta(days=value)
+            return timedelta(weeks=1) # Default if parsing fails
+
+        roadmap_tasks_for_gantt = []
+        current_date = datetime.now()
+        overall_start_date = current_date
+
         roadmap_lines = st.session_state.roadmap.splitlines()
-        current_section = None
-        section_content = []
-        for i, line in enumerate(roadmap_lines):
+        current_phase_gantt = "General"
+        current_module_gantt = "General"
+
+        for line_idx, line_content in enumerate(roadmap_lines):
+            line_content = line_content.strip()
+            if not line_content:
+                continue
+
+            task_name = ""
+            task_type = "Task" # Phase, Module, Task
+            duration_text = ""
+
+            if line_content.startswith("##"): # Phase
+                task_name = line_content[2:].strip()
+                # Try to extract duration from phase title, e.g., "## Phase 1: Foundations (Weeks 1-4)"
+                duration_match = re.search(r'\(Weeks (\d+)-(\d+)\)', task_name, re.IGNORECASE)
+                if duration_match:
+                    start_week = int(duration_match.group(1))
+                    end_week = int(duration_match.group(2))
+                    duration = timedelta(weeks=(end_week - start_week + 1))
+                    task_name = re.sub(r'\s*\(Weeks \d+-\d+\)', '', task_name).strip() # Clean task name
+                else:
+                    duration = timedelta(weeks=4) # Default phase duration
+                current_phase_gantt = task_name
+                task_type = "Phase"
+            elif line_content.startswith("**") and line_content.endswith("**"): # Module
+                task_name = line_content[2:-2].strip()
+                duration = timedelta(weeks=2) # Default module duration, sum of sub-tasks later if possible
+                current_module_gantt = task_name
+                task_type = "Module"
+            elif line_content.startswith("*"): # Task
+                task_name = line_content[1:].strip()
+                duration_match = re.search(r'(\(.*\))', task_name)
+                if duration_match:
+                    duration_text = duration_match.group(1)
+                    task_name = task_name.replace(duration_text, "").strip()
+                duration = parse_duration(duration_text)
+                task_type = "Task"
+
+            if task_name:
+                # Key for progress tracking should match the one used in checkboxes
+                # For phases/modules, we don't have checkboxes yet, so make a unique key
+                if task_type == "Phase":
+                    progress_key = f"phase_{task_name}"
+                elif task_type == "Module":
+                    progress_key = f"{current_phase_gantt}_{task_name}"
+                else: # Task
+                    # This needs to match the checkbox key logic: f"{current_section}_{content_line}"
+                    # We need to reconstruct `current_section` as it was when checkboxes were made.
+                    # This is tricky. For now, let's assume module name is a good proxy for section for tasks.
+                    progress_key = f"{current_module_gantt}_{line_content}"
+
+
+                completed_status = st.session_state.progress.get(progress_key, False)
+
+                roadmap_tasks_for_gantt.append(dict(
+                    Task=task_name,
+                    Start=current_date.strftime("%Y-%m-%d"),
+                    Finish=(current_date + duration).strftime("%Y-%m-%d"),
+                    Resource=current_phase_gantt if task_type != "Phase" else "Project Phases", # Group by phase
+                    Status="Completed" if completed_status else "Pending",
+                    Type=task_type
+                ))
+                if task_type != "Phase": # Only advance date for modules and tasks within a phase
+                    current_date += duration
+
+        if roadmap_tasks_for_gantt:
+            # Ensure overall timeline doesn't exceed ~6 months from the first task for display scaling
+            # This is a rough cap for visualization if total duration is very long.
+            # More sophisticated would be to scale durations proportionally if they exceed 6 months.
+
+            # Create a DataFrame
+            import pandas as pd
+            df_gantt = pd.DataFrame(roadmap_tasks_for_gantt)
+            df_gantt['Start'] = pd.to_datetime(df_gantt['Start'])
+            df_gantt['Finish'] = pd.to_datetime(df_gantt['Finish'])
+
+            # Cap end dates at 6 months from the start of the first task for visualization
+            # overall_project_end_date = df_gantt['Start'].min() + timedelta(days=180)
+            # df_gantt['Finish'] = df_gantt['Finish'].apply(lambda x: min(x, overall_project_end_date))
+
+
+            fig_gantt = px.timeline(
+                df_gantt,
+                x_start="Start",
+                x_end="Finish",
+                y="Task",
+                color="Status",
+                title="Project Timeline",
+                hover_name="Task",
+                color_discrete_map={"Completed": "green", "Pending": "orange", "Overdue": "red"}, # Add more statuses if needed
+                category_orders={"Task": df_gantt.sort_values(by="Start")["Task"].tolist()} # Preserve order
+            )
+            fig_gantt.update_yaxes(autorange="reversed") # To display tasks from top to bottom
+            fig_gantt.update_layout(
+                title_font_size=20,
+                font_size=10,
+                plot_bgcolor='rgba(45,45,68,1)', # Match app's dark theme
+                paper_bgcolor='rgba(45,45,68,1)',# Match app's dark theme
+                font_color="white",
+                legend_title_text='Task Status'
+            )
+            st.plotly_chart(fig_gantt, use_container_width=True)
+
+            # "Mark Complete" and "Remind Me" buttons for tasks shown in Gantt
+            st.markdown("---")
+            st.subheader("Timeline Task Actions")
+            selected_gantt_task_name = st.selectbox(
+                "Select a task from timeline to manage:",
+                options=[t['Task'] for t in roadmap_tasks_for_gantt if t['Type'] == 'Task'] # Only individual tasks
+            )
+
+            if selected_gantt_task_name:
+                # Find the original line content for the selected task to build the correct progress_key
+                original_line_for_selected_task = ""
+                # This is a simplification: assuming task names are unique enough for this demo
+                # A more robust solution would involve storing unique IDs for each task during parsing.
+                for r_line in roadmap_lines:
+                    if selected_gantt_task_name in r_line and r_line.strip().startswith("*"):
+                        original_line_for_selected_task = r_line.strip()
+                        break
+
+                # Reconstruct progress key (needs to be robust)
+                # This is still a bit fragile. Finding the exact section header for the task is key.
+                # For now, we'll try to find the module it belongs to.
+                _current_module_for_key = "General" # default
+                for task_info in roadmap_tasks_for_gantt:
+                    if task_info["Task"] == selected_gantt_task_name:
+                        # Find its module by looking at previous items or its resource
+                        for r_task in reversed(roadmap_tasks_for_gantt[:roadmap_tasks_for_gantt.index(task_info)]):
+                            if r_task["Type"] == "Module":
+                                _current_module_for_key = r_task["Task"]
+                                break
+                        break
+
+                # The progress key for a checkbox is `f"{current_section}_{content_line}"`
+                # where current_section is the module name (e.g. "Module 1.1: Introduction to X")
+                # and content_line is the task line (e.g. "* Learn basic syntax (1 week)")
+                # This part is the most complex to get right with current parsing.
+                # The Gantt task name is cleaned, but the progress key uses the raw line.
+
+                # Let's try to find the progress key more directly if possible
+                # This requires matching the cleaned task name back to its original form + section
+                target_progress_key = None
+                for key_iter, val_iter in st.session_state.progress.items():
+                    # Progress keys are like "Section Name_* Task Name (duration)"
+                    if selected_gantt_task_name in key_iter and key_iter.endswith(original_line_for_selected_task):
+                        target_progress_key = key_iter
+                        break
+                # Fallback if exact match not found (e.g. due to name cleaning)
+                if not target_progress_key and original_line_for_selected_task:
+                     # Attempt to find a key that contains the task name and its original line structure
+                    for key_iter, val_iter in st.session_state.progress.items():
+                        if selected_gantt_task_name in key_iter and original_line_for_selected_task.split('(')[0].strip() in key_iter :
+                             target_progress_key = key_iter
+                             break
+
+                if not target_progress_key and original_line_for_selected_task:
+                    # Last resort: construct based on identified module and original line
+                    # This relies on _current_module_for_key being accurately identified for the task
+                    target_progress_key = f"{_current_module_for_key}_{original_line_for_selected_task}"
+
+
+                col_gantt_action1, col_gantt_action2 = st.columns(2)
+                with col_gantt_action1:
+                    if target_progress_key and target_progress_key in st.session_state.progress:
+                        current_status = st.session_state.progress[target_progress_key]
+                        button_label = "Mark as Pending" if current_status else "Mark as Complete"
+                        if st.button(button_label, key=f"gantt_toggle_{selected_gantt_task_name}"):
+                            st.session_state.progress[target_progress_key] = not current_status
+                            save_progress()
+                            st.success(f"Task '{selected_gantt_task_name}' status updated.")
+                            st.rerun() # To update Gantt chart color
+                    else:
+                        st.warning(f"Could not reliably link '{selected_gantt_task_name}' to progress tracker. Progress key: {target_progress_key}")
+
+                with col_gantt_action2:
+                    if st.button(f"⏰ Remind Me: {selected_gantt_task_name}", key=f"gantt_remind_{selected_gantt_task_name}"):
+                        st.toast(f"Reminder set for '{selected_gantt_task_name}' (feature in development).")
+        else:
+            st.info("No tasks found in the roadmap to display on the timeline.")
+
+        st.markdown("---") # Separator before the old progress tracker
+
+        st.subheader("📈 Progress Tracker (Checklist)")
+        load_progress() # Ensure progress is loaded
+
+        # Re-parse roadmap for checklist section, ensuring keys are consistent.
+        # The key challenge is that Gantt parsing might differ slightly from checklist parsing.
+        # The `current_section` for checklist items is typically the module header.
+
+        checklist_roadmap_lines = st.session_state.roadmap.splitlines()
+        checklist_current_section = None # This is usually the module name like "**Module 1.1**"
+        checklist_section_content = []
+
+        # Logic for displaying checkboxes (similar to original)
+        # This section needs to be careful about how `current_section` is defined for tasks
+        # to match the keys used by Gantt chart actions if possible.
+
+        temp_current_section_for_checklist = "Unknown Section" # Default if no section found
+
+        for i, line in enumerate(checklist_roadmap_lines):
             line = line.strip()
             if not line:
                 continue
-            if line.startswith("**"):
-                if current_section and section_content:
-                    st.markdown(f"## {current_section}")
-                    if any(item.startswith("*") for item in section_content):
-                        if st.button("Edit Section", key=f"edit_{i-len(section_content)}"):
-                            st.session_state.editing_section = i - len(section_content)
-                    for content_line in section_content:
+
+            is_section_header = line.startswith("**") and line.endswith("**")
+            is_phase_header = line.startswith("##")
+
+            if is_phase_header: # A phase header also resets the section for checklist
+                if checklist_current_section and checklist_section_content: # Process previous section
+                    st.markdown(f"### {checklist_current_section}") # Use H3 for modules in checklist
+                    # Edit button logic can remain similar if needed for these sections
+                    # if st.button("Edit Section", key=f"edit_checklist_{temp_current_section_for_checklist.replace(' ','_')}"):
+                    #    st.session_state.editing_section = ... (needs careful index mapping)
+                    for content_line_idx, content_line in enumerate(checklist_section_content):
                         if content_line.startswith("*"):
-                            item_key = f"{current_section}_{content_line}"
+                            item_key = f"{checklist_current_section}_{content_line}"
                             if item_key not in st.session_state.progress:
                                 st.session_state.progress[item_key] = False
-                            completed = st.checkbox(f"{content_line[1:]}", value=st.session_state.progress[item_key], key=f"check_{i}_{content_line}")
+                            completed = st.checkbox(
+                                f"{content_line[1:]}",
+                                value=st.session_state.progress[item_key],
+                                key=f"check_{checklist_current_section}_{i}_{content_line_idx}" # Ensure unique key
+                            )
                             if completed != st.session_state.progress[item_key]:
                                 st.session_state.progress[item_key] = completed
                                 save_progress()
+                                st.rerun() # To update Gantt chart potentially
+                        else:
+                            st.markdown(content_line) # Non-task lines within a section
+
+                st.markdown(f"## {line[2:].strip()}") # Display Phase Name
+                checklist_current_section = None # Reset current module/section under this phase
+                checklist_section_content = []
+                temp_current_section_for_checklist = line[2:].strip() # For context if no module follows
+
+            elif is_section_header: # This is a Module
+                if checklist_current_section and checklist_section_content: # Process previous module's content
+                    st.markdown(f"### {checklist_current_section}")
+                    for content_line_idx, content_line in enumerate(checklist_section_content):
+                        if content_line.startswith("*"):
+                            item_key = f"{checklist_current_section}_{content_line}"
+                            # ... (checkbox logic as above) ...
+                            if item_key not in st.session_state.progress:
+                                st.session_state.progress[item_key] = False
+                            completed = st.checkbox(
+                                f"{content_line[1:]}",
+                                value=st.session_state.progress[item_key],
+                                key=f"check_{checklist_current_section}_{i}_{content_line_idx}"
+                            )
+                            if completed != st.session_state.progress[item_key]:
+                                st.session_state.progress[item_key] = completed
+                                save_progress()
+                                st.rerun()
                         else:
                             st.markdown(content_line)
-                current_section = line[2:]
-                section_content = []
-            else:
-                section_content.append(line)
-        if current_section and section_content:
-            st.markdown(f"## {current_section}")
-            if any(item.startswith("*") for item in section_content):
-                if st.button("Edit Section", key=f"edit_{len(roadmap_lines)-1}"):
-                    st.session_state.editing_section = len(roadmap_lines) - len(section_content)
-            for content_line in section_content:
+
+                checklist_current_section = line[2:-2].strip() # New module name
+                checklist_section_content = []
+                # No st.markdown(f"### {checklist_current_section}") here, done when section is processed or new one starts
+
+            elif checklist_current_section: # This line is content for the current module
+                checklist_section_content.append(line)
+            elif temp_current_section_for_checklist and not is_phase_header and not is_section_header : # Content under a phase but not in a module yet
+                 # This case might be rare if roadmap structure is Phase > Module > Task
+                 # For now, treat as part of the phase or a general section
+                if not checklist_section_content : st.markdown(f"### Tasks for {temp_current_section_for_checklist}")
+                checklist_section_content.append(line)
+                if checklist_current_section is None: checklist_current_section = temp_current_section_for_checklist # Assign phase as section if no module
+
+
+        # Process the last section
+        if checklist_current_section and checklist_section_content:
+            st.markdown(f"### {checklist_current_section}")
+            # Edit button for last section
+            # if st.button("Edit Section", key=f"edit_checklist_last_{checklist_current_section.replace(' ','_')}"):
+            #    st.session_state.editing_section = ...
+            for content_line_idx, content_line in enumerate(checklist_section_content):
                 if content_line.startswith("*"):
-                    item_key = f"{current_section}_{content_line}"
+                    item_key = f"{checklist_current_section}_{content_line}"
                     if item_key not in st.session_state.progress:
                         st.session_state.progress[item_key] = False
-                    completed = st.checkbox(f"{content_line[1:]}", value=st.session_state.progress[item_key], key=f"check_{len(roadmap_lines)}_{content_line}")
+                    completed = st.checkbox(
+                        f"{content_line[1:]}",
+                        value=st.session_state.progress[item_key],
+                        key=f"check_last_{checklist_current_section}_{content_line_idx}" # Unique key for last items
+                    )
                     if completed != st.session_state.progress[item_key]:
                         st.session_state.progress[item_key] = completed
                         save_progress()
+                        st.rerun()
                 else:
                     st.markdown(content_line)
+
+        # Fallback for content that might not be under any section (should be rare)
+        elif not checklist_current_section and checklist_section_content:
+             st.markdown(f"### Other Items")
+             for content_line_idx, content_line in enumerate(checklist_section_content):
+                if content_line.startswith("*"):
+                    # Simplified key if no section
+                    item_key = f"general_{content_line}"
+                    if item_key not in st.session_state.progress:
+                        st.session_state.progress[item_key] = False
+                    completed = st.checkbox(
+                        f"{content_line[1:]}",
+                        value=st.session_state.progress[item_key],
+                        key=f"check_other_{content_line_idx}"
+                    )
+                    if completed != st.session_state.progress[item_key]:
+                        st.session_state.progress[item_key] = completed
+                        save_progress()
+                        st.rerun()
+                else:
+                    st.markdown(content_line)
+
+
         if st.session_state.editing_section is not None:
+            # Editing logic needs to be adjusted if indices change due to Gantt chart display
+            # For now, this part is less critical for the Gantt feature itself.
+            # The original editing logic might still work if it's based on raw roadmap_lines indices.
+            # However, `st.rerun()` from Gantt chart actions might interfere if not handled carefully.
+            # To simplify, I'll keep the original editing logic but note it might need review.
+            # For this step, focusing on Gantt display and basic interaction.
+            # --- Original Editing Logic ---
             edit_index = st.session_state.editing_section
             section_line = roadmap_lines[edit_index]
             st.subheader(f"Editing Section: {section_line[2:]}")
