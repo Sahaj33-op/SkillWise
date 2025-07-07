@@ -1118,11 +1118,15 @@ with tab2:
             y_position -= 0.5 * inch
 
             # Enhanced title section
+            title_text = "Your Personalized Learning Roadmap"
+            if st.session_state.get("focused_jd_roadmap"): # Check if it's a job-specific roadmap
+                title_text = "Focused Learning Roadmap (Based on Job Description)"
+
             c.setFont("Helvetica-Bold", 28)
             c.setFillColor(primary_color)
             y_position = wrap_text(
-                c, "Your Personalized Learning Roadmap", left_margin, y_position,
-                content_width, "Helvetica-Bold", 28, line_spacing=24
+                c, title_text, left_margin, y_position,
+                content_width, "Helvetica-Bold", 28, line_spacing=32 # Increased line spacing for main title
             )
             y_position -= 0.3 * inch
 
@@ -1130,10 +1134,45 @@ with tab2:
             c.setFont("Helvetica", 12)
             c.setFillColor(text_color)
             y_position = wrap_text(
-                c, f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", left_margin, y_position,
-                content_width, "Helvetica", 12, line_spacing=16
+                c, f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} for role: {effective_role}",
+                left_margin, y_position, content_width, "Helvetica", 12, line_spacing=16
             )
             y_position -= 0.4 * inch
+
+            # Add Job Fit Analysis if available
+            if st.session_state.get("job_fit_analysis"):
+                if y_position < bottom_margin + 3 * inch: # Check space
+                    draw_footer(page_num)
+                    c.showPage()
+                    page_num += 1
+                    draw_header()
+                    y_position = height - top_margin - 0.5 * inch
+
+                y_position = draw_section_header("Job Fit Analysis", y_position, is_phase=False)
+                y_position -= 0.1 * inch # Small gap
+                analysis_text = clean_text(st.session_state.job_fit_analysis)
+                c.setFont("Helvetica", 10)
+                c.setFillColor(text_color)
+                y_position = wrap_text(c, analysis_text, left_margin + 0.2*inch, y_position, content_width - 0.2*inch, "Helvetica", 10, line_spacing=12)
+                y_position -= 0.3 * inch
+
+
+            # Add Smart AI Gap Analysis if available (and not a JD-focused roadmap, to avoid redundancy if similar)
+            if st.session_state.get("smart_gap_analysis_result") and not st.session_state.get("job_fit_analysis"):
+                if y_position < bottom_margin + 3 * inch: # Check space
+                    draw_footer(page_num)
+                    c.showPage()
+                    page_num += 1
+                    draw_header()
+                    y_position = height - top_margin - 0.5 * inch
+
+                y_position = draw_section_header("Smart AI Gap Analysis", y_position, is_phase=False)
+                y_position -= 0.1 * inch # Small gap
+                analysis_text = clean_text(st.session_state.smart_gap_analysis_result)
+                c.setFont("Helvetica", 10)
+                c.setFillColor(text_color)
+                y_position = wrap_text(c, analysis_text, left_margin + 0.2*inch, y_position, content_width - 0.2*inch, "Helvetica", 10, line_spacing=12)
+                y_position -= 0.3 * inch
 
             # Process roadmap content with enhanced styling
             lines = st.session_state.roadmap.splitlines()
@@ -1277,10 +1316,22 @@ with tab2:
             mime="application/json"
         )
         
-        unique_id = hash(st.session_state.roadmap) % 1000000
-        with open(f"roadmap_{unique_id}.json", "w") as f:
+        unique_id = hash(st.session_state.roadmap + st.session_state.resume_text + effective_role) % 1000000 # Make hash more unique
+
+        # Save roadmap data locally (for now, this is not truly shareable across users/sessions without a backend)
+        local_share_filename = f"shared_roadmap_data_{unique_id}.json"
+        with open(local_share_filename, "w") as f:
             json.dump(roadmap_data, f)
-        st.markdown(f"🔗 Shareable link: `http://skillwise.local/roadmap/{unique_id}` (Note: Deploy to a server for real links)")
+
+        st.markdown(
+            f"**Note on Sharing:** The 'Shareable Link' below is a placeholder for a future feature. "
+            f"True sharing requires backend integration (coming soon with Supabase!). "
+            f"For now, a local data file (`{local_share_filename}`) has been saved in the app's directory, "
+            f"which contains the data for this specific roadmap generation."
+        )
+        st.markdown(f"🔗 Potential Future Shareable Link: `https://your-skillwise-app-url.com/shared?id={unique_id}`")
+        st.info(f"To actually share, you would need to host the app and implement a way to serve '{local_share_filename}' or its content based on the ID.")
+
     else:
         st.info("🚧 Generate a roadmap in the Resume tab.")
 
