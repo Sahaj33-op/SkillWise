@@ -315,44 +315,71 @@ with tab1:
             st.warning("⚠️ Please select a valid role.")
         elif st.session_state.role == "Other" and not st.session_state.custom_role.strip():
             st.warning("⚠️ Please specify a role in the text field.")
+
+        # Define status_container here so it's available for pre-checks
+        # However, Streamlit elements should ideally be created once per run.
+        # For messages that appear *before* processing, st.warning/st.error directly might be better.
+        # Let's refine this. Pre-condition checks will use direct st.warning/error.
+        # status_container will be for the processing block itself.
+
         elif not st.session_state.gemini_api_key:
-            status_container.error("❌ Please enter a Gemini API key in the sidebar.")
+            st.error("❌ Please enter a Gemini API key in the sidebar.") # Direct error message
         else:
             st.session_state.is_processing = True
-            status_container = st.empty()
-            with status_container.container():
+            # Moved status_container definition inside the processing block
+            processing_status_container = st.empty()
+
+            # Construct the prompt for general roadmap generation
+            prompt = (
+                f"Resume Text:\n{st.session_state.resume_text}\n\n"
+                f"Target Role: {effective_role}\n"
+                f"Career Goal: {st.session_state.goal}\n\n"
+                "Generate a personalized 6-month learning roadmap. Focus on free or low-cost resources. "
+                "Include specific course suggestions (if possible, from platforms like Coursera, edX, YouTube), "
+                "project ideas to build a portfolio, and a general career plan or phases. "
+                "The roadmap should be structured with clear phases, modules, and actionable tasks. "
+                "Indicate estimated durations for tasks or modules (e.g., in weeks or days)."
+            )
+
+            with processing_status_container.container():
                 progress_bar = st.progress(0)
                 eta_placeholder = st.empty()
+
             start_time = time.time()
+            error_occurred = False
             
             try:
-                # Configure API
                 genai.configure(api_key=st.session_state.gemini_api_key)
                 
-                # Simulate progress while generating roadmap
-                estimated_duration = st.session_state.generation_time # Use previous generation time as estimate
-                steps = 50 # Number of steps for the simulated progress
+                estimated_duration = st.session_state.generation_time
+                steps = 50
                 for i in range(steps):
-                    progress = int((i / steps) * 90) # Go up to 90% before actual generation
-                    update_progress(progress_bar, eta_placeholder, progress, 100, start_time, estimated_duration, "Generating Roadmap")
-                    time.sleep(estimated_duration / steps)
+                    progress_val = int((i / steps) * 90)
+                    update_progress(progress_bar, eta_placeholder, progress_val, 100, start_time, estimated_duration, "Generating Roadmap")
+                    time.sleep(estimated_duration / (steps * 10)) # Shortened sleep for faster simulation if needed
 
-                # Generate roadmap
                 st.session_state.roadmap = generate_roadmap(prompt)
                 
-                # Update final progress
                 update_progress(progress_bar, eta_placeholder, 100, 100, start_time, estimated_duration, "Complete")
-                
-                # Update generation time
                 actual_time = time.time() - start_time
                 st.session_state.generation_time = actual_time
                 
-                status_container.success("✅ Roadmap generated! Check it in the Roadmap tab.") # Use container for success message
+                processing_status_container.success("✅ Roadmap generated! Check it in the Roadmap tab.")
                 
             except Exception as e:
-                status_container.error(f"❌ Error generating roadmap: {str(e)}") # Use container for error message
+                error_occurred = True
+                # Display error within the specific container, so it persists until next action
+                processing_status_container.error(f"❌ Error generating roadmap: {str(e)}")
             finally:
-                status_container.empty() # Clear the entire container
+                # Only clear the container if NO error occurred and it was a success message
+                # This is tricky because success message is part of the container.
+                # A better approach: if an error occurs, the error message stays.
+                # If successful, the success message stays until the next action clears it implicitly or explicitly.
+                # For now, if an error occurred, the error message from the except block should remain.
+                # The success message also remains. This is acceptable.
+                # Let's not call .empty() in finally to ensure messages persist.
+                # The container will be replaced/cleared on the next run if the button is pressed again,
+                # or if other parts of the UI update.
                 st.session_state.is_processing = False
 
     st.markdown("---")
