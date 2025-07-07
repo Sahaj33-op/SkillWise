@@ -14,6 +14,18 @@ from roadmap_generator import generate_roadmap
 from goal_analyzer import analyze_goals
 import google.generativeai as genai
 
+# Load skills data from JSON
+@st.cache_data
+def load_skills_data():
+    try:
+        with open("skills_data.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        st.error("Error: skills_data.json not found. Please ensure it's in the same directory as app.py")
+        return {}
+
+skills_data = load_skills_data()
+
 def update_progress(progress_bar, eta_placeholder, current_progress, total_stages, start_time, estimated_time, stage_name):
     """Update progress bar with current stage information."""
     progress = (current_progress / total_stages) * 100
@@ -155,6 +167,8 @@ if "first_visit" not in st.session_state:
     st.session_state.first_visit = True
 if "survey_submitted" not in st.session_state:
     st.session_state.survey_submitted = False
+if "survey_submitted" not in st.session_state:
+    st.session_state.survey_submitted = False
 if "resume_upload_time" not in st.session_state:
     st.session_state.resume_upload_time = 5.0
 if "is_processing" not in st.session_state:
@@ -214,7 +228,11 @@ with tab1:
     st.session_state.goal = st.text_input("What role are you targeting?", placeholder="e.g., AI Developer, Product Manager", value=st.session_state.goal)
     if st.session_state.goal.strip():
         goal_analysis = analyze_goals(st.session_state.goal)
-        st.markdown(goal_analysis)
+        # Check for the specific NLTK error message
+        if "Error analyzing goal" in goal_analysis:
+            st.warning("⚠️ There was an issue analyzing your goal. Please ensure NLTK data is correctly set up or try a different goal.")
+        else:
+            st.markdown(goal_analysis)
     st.subheader("📚 Select Tech Role")
     roles = [
         "Select a tech role",
@@ -244,8 +262,9 @@ with tab1:
     
     if uploaded_file is not None and not st.session_state.is_processing:
         st.session_state.is_processing = True
-        progress_bar = st.progress(0)
-        eta_placeholder = st.empty()
+        status_container = st.empty() # Create a container for status messages and progress
+        progress_bar = status_container.progress(0)
+        eta_placeholder = status_container.empty()
         start_time = time.time()
         
         try:
@@ -262,19 +281,18 @@ with tab1:
             if len(parsed_text.strip()) > 20:
                 st.session_state.parsed_resume = parsed_text
                 st.session_state.resume_text = parsed_text
-                st.success("✅ Resume uploaded and processed successfully!")
+                status_container.success("✅ Resume uploaded and processed successfully!") # Use container for success message
             else:
-                st.error("⚠️ Failed to extract meaningful content. Try another resume.")
+                status_container.error("⚠️ Failed to extract meaningful content. Try another resume.") # Use container for error message
                 
         except Exception as e:
-            st.error(f"❌ Error processing resume: {str(e)}")
+            status_container.error(f"❌ Error processing resume: {str(e)}") # Use container for error message
         finally:
             try:
                 os.remove(tmp_path)
             except:
                 pass
-            progress_bar.empty()
-            eta_placeholder.empty()
+            status_container.empty() # Clear the entire container
             st.session_state.is_processing = False
             
             # Update estimated time for future uploads
@@ -289,135 +307,88 @@ with tab1:
         elif st.session_state.role == "Other" and not st.session_state.custom_role.strip():
             st.warning("⚠️ Please specify a role in the text field.")
         elif not st.session_state.gemini_api_key:
-            st.error("❌ Please enter a Gemini API key in the sidebar.")
+            status_container.error("❌ Please enter a Gemini API key in the sidebar.")
         else:
             st.session_state.is_processing = True
-            progress_bar = st.progress(0)
-            eta_placeholder = st.empty()
+            status_container = st.empty()
+            with status_container.container():
+                progress_bar = st.progress(0)
+                eta_placeholder = st.empty()
             start_time = time.time()
             
             try:
                 # Configure API
                 genai.configure(api_key=st.session_state.gemini_api_key)
                 
-                # Generate prompt
-                prompt = (
-                    f"Create a personalized learning roadmap to help the user achieve their career goal of becoming a {effective_role} "
-                    f"with the specific aspiration: '{st.session_state.goal}'. "
-                    f"Based on the role of {effective_role}, identify the key skills and knowledge areas required, "
-                    f"and focus on bridging the gaps between the user's current skills and the role's requirements. "
-                    f"Provide a step-by-step roadmap with actionable learning steps, including specific resources (e.g., courses, tutorials) "
-                    f"and tag each resource with relevant labels (e.g., 'YouTube', 'Beginner-Friendly', 'Coursera') in the format: "
-                    f"'* <step> - <tag1>, <tag2>'. Ensure the roadmap is practical and tailored to the user's goal and role."
-                )
-                
-                # Update progress
-                update_progress(progress_bar, eta_placeholder, 0, 100, start_time, st.session_state.generation_time, "Generating Roadmap")
-                
+                # Simulate progress while generating roadmap
+                estimated_duration = st.session_state.generation_time # Use previous generation time as estimate
+                steps = 50 # Number of steps for the simulated progress
+                for i in range(steps):
+                    progress = int((i / steps) * 90) # Go up to 90% before actual generation
+                    update_progress(progress_bar, eta_placeholder, progress, 100, start_time, estimated_duration, "Generating Roadmap")
+                    time.sleep(estimated_duration / steps)
+
                 # Generate roadmap
                 st.session_state.roadmap = generate_roadmap(prompt)
                 
                 # Update final progress
-                update_progress(progress_bar, eta_placeholder, 100, 100, start_time, st.session_state.generation_time, "Complete")
+                update_progress(progress_bar, eta_placeholder, 100, 100, start_time, estimated_duration, "Complete")
                 
                 # Update generation time
                 actual_time = time.time() - start_time
                 st.session_state.generation_time = actual_time
                 
-                st.success("✅ Roadmap generated! Check it in the Roadmap tab.")
+                status_container.success("✅ Roadmap generated! Check it in the Roadmap tab.") # Use container for success message
                 
             except Exception as e:
-                st.error(f"❌ Error generating roadmap: {str(e)}")
+                status_container.error(f"❌ Error generating roadmap: {str(e)}") # Use container for error message
             finally:
-                progress_bar.empty()
-                eta_placeholder.empty()
+                status_container.empty() # Clear the entire container
                 st.session_state.is_processing = False
 
 # Roadmap Tab
 with tab2:
     if st.session_state.roadmap:
         st.header("🗺️ Your AI-Powered Learning Roadmap")
-        required_skills = {
-            "AI Engineer": ["Python", "Machine Learning", "TensorFlow", "NLP"],
-            "Frontend Developer": ["HTML", "CSS", "JavaScript", "React"],
-            "Backend Developer": ["Python", "Node.js", "SQL", "REST APIs"],
-            "Full Stack Developer": ["HTML", "JavaScript", "Node.js", "SQL"],
-            "Product Manager": ["Agile", "SQL", "Figma", "Jira"],
-            "Data Analyst": ["SQL", "Excel", "Tableau", "Python"],
-            "Cybersecurity Expert": ["Networking", "Penetration Testing", "Cryptography", "Linux"],
-            "DevOps Engineer": ["Docker", "Kubernetes", "AWS", "CI/CD"],
-            "UI/UX Designer": ["Figma", "Adobe XD", "User Research", "Prototyping"],
-            "Machine Learning Engineer": ["Python", "TensorFlow", "Scikit-learn", "Deep Learning"],
-            "Blockchain Developer": ["Solidity", "Ethereum", "Smart Contracts", "Cryptography"],
-            "Cloud Architect": ["AWS", "Azure", "GCP", "Terraform"],
-            "Data Scientist": ["Python", "R", "Machine Learning", "Statistics"],
-            "Software Engineer": ["Java", "Python", "Git", "Algorithms"],
-            "Mobile App Developer": ["Swift", "Kotlin", "React Native", "Flutter"]
-        }
-        default_skills = ["Python", "Git", "Problem Solving", "Communication"]
-        skills_to_check = required_skills.get(effective_role, default_skills)
+        
+        required_skills = {}
+        default_skills = []
+        expanded_skill_terms = {}
+        course_recommendations = {}
+        skills_to_check = [] # Initialize to an empty list
+
+        if isinstance(skills_data, dict) and skills_data:
+            required_skills = skills_data.get("required_skills", {})
+            default_skills = skills_data.get("default_skills", [])
+            expanded_skill_terms = skills_data.get("expanded_skill_terms", {})
+            course_recommendations = skills_data.get("course_recommendations", {})
+
+            skills_to_check = required_skills.get(effective_role, default_skills)
+        else:
+            st.warning("⚠️ Skill data could not be loaded. Please check 'skills_data.json'.")
+
         if skills_to_check:
-            matching_skills = [skill for skill in skills_to_check if skill.lower() in st.session_state.resume_text.lower()]
-            skill_match_score = (len(matching_skills) / len(skills_to_check)) * 100
+            resume_text_lower = st.session_state.resume_text.lower()
+            matched_conceptual_skills = []
+            for conceptual_skill in skills_to_check:
+                # Get aliases for the conceptual skill, or use the skill itself if no aliases are defined
+                aliases = expanded_skill_terms.get(conceptual_skill, [conceptual_skill])
+                if any(alias.lower() in resume_text_lower for alias in aliases):
+                    matched_conceptual_skills.append(conceptual_skill)
+
+            skill_match_score = (len(matched_conceptual_skills) / len(skills_to_check)) * 100
             st.subheader("📊 Skill Match Score")
             st.markdown(f"Your skills match {skill_match_score:.1f}% of the requirements for {effective_role}.")
-        course_recommendations = {
-            "Python": "Python for Everybody - Coursera",
-            "Machine Learning": "Machine Learning by Andrew Ng - Coursera",
-            "TensorFlow": "TensorFlow Developer Certificate - Coursera",
-            "NLP": "Natural Language Processing Specialization - Coursera",
-            "HTML": "HTML, CSS, and Javascript for Web Developers - Coursera",
-            "CSS": "HTML, CSS, and Javascript for Web Developers - Coursera",
-            "JavaScript": "JavaScript: The Complete Guide - Udemy",
-            "React": "React - The Complete Guide - Udemy",
-            "Node.js": "Node.js, Express, MongoDB & More - Udemy",
-            "SQL": "SQL for Data Science - Coursera",
-            "REST APIs": "REST API Design, Development & Management - Udemy",
-            "Agile": "Agile Project Management - Udemy",
-            "Figma": "Figma for UI/UX Design - Udemy",
-            "Jira": "Mastering Jira - Udemy",
-            "Excel": "Excel Skills for Business - Coursera",
-            "Tableau": "Data Visualization with Tableau - Coursera",
-            "Networking": "Networking Fundamentals - Cisco Networking Academy",
-            "Penetration Testing": "Penetration Testing with Kali Linux - Udemy",
-            "Cryptography": "Cryptography I - Coursera",
-            "Linux": "Linux Mastery: Master the Linux Command Line - Udemy",
-            "Docker": "Docker Mastery: The Complete Guide - Udemy",
-            "Kubernetes": "Kubernetes for the Absolute Beginners - Udemy",
-            "AWS": "AWS Certified Solutions Architect - Udemy",
-            "CI/CD": "CI/CD with Jenkins and GitLab - Coursera",
-            "Adobe XD": "Adobe XD for Beginners - Udemy",
-            "User Research": "User Research and Design - Coursera",
-            "Prototyping": "Prototyping with Figma - Udemy",
-            "Scikit-learn": "Machine Learning with Python - Coursera",
-            "Deep Learning": "Deep Learning Specialization - Coursera",
-            "Solidity": "Solidity and Ethereum Smart Contracts - Udemy",
-            "Ethereum": "Blockchain and Ethereum Development - Coursera",
-            "Smart Contracts": "Smart Contracts with Solidity - Udemy",
-            "Azure": "Microsoft Azure Fundamentals - Coursera",
-            "GCP": "Google Cloud Platform Fundamentals - Coursera",
-            "Terraform": "Terraform for Beginners - Udemy",
-            "R": "R Programming - Coursera",
-            "Statistics": "Statistics with R - Coursera",
-            "Java": "Java Programming: Complete Beginner to Advanced - Udemy",
-            "Git": "Git Complete: The Definitive Guide - Udemy",
-            "Algorithms": "Algorithms and Data Structures - Coursera",
-            "Swift": "iOS Development with Swift - Udemy",
-            "Kotlin": "Kotlin for Android Development - Udemy",
-            "React Native": "React Native - The Practical Guide - Udemy",
-            "Flutter": "Flutter & Dart - The Complete Guide - Udemy",
-            "Problem Solving": "Problem Solving for Developers - Udemy",
-            "Communication": "Effective Communication Skills - Coursera"
-        }
-        if skills_to_check:
-            missing_skills = [skill for skill in skills_to_check if skill.lower() in st.session_state.resume_text.lower()]
-            if missing_skills:
-                st.subheader("🔍 Skill Gap Analysis")
-                st.markdown(f"Skills missing for {effective_role}: {', '.join(missing_skills)}")
+
+            st.subheader("🔍 Skill Gap Analysis")
+            missing_conceptual_skills = [skill for skill in skills_to_check if skill not in matched_conceptual_skills]
+
+            if missing_conceptual_skills:
+                st.markdown(f"Skills missing for {effective_role}: {', '.join(missing_conceptual_skills)}")
                 st.subheader("📚 Recommended Courses for Skill Gaps")
-                for skill in missing_skills:
+                for skill in missing_conceptual_skills:
                     if skill in course_recommendations:
-                        st.markdown(f"- {skill}: {course_recommendations[skill]}")
+                        st.markdown(f"- **{skill}**: {course_recommendations[skill]}")
                     else:
                         st.markdown(f"- **{skill}**: No specific course recommendation available. Try searching on Coursera or Udemy.")
             else:
