@@ -76,10 +76,9 @@
 3.  **Roadmap Tab showing the Smart AI Gap Analysis output.**
 4.  **Job Role Simulator expander with a JD pasted and the Fit Analysis shown.**
 
-| Resume Upload (PDF/JSON) | Generated Roadmap with Timeline | Smart AI Gap Analysis | Job Role Simulator |
-|--------------------------|---------------------------------|-----------------------|--------------------|
-| *(New Screenshot Here)*  | *(New Screenshot Here)*         | *(New Screenshot Here)* | *(New Screenshot Here)* |
-| <img src="screenshots/upload.png" alt="Resume Upload" width="100%"/> (Example of old UI) | <img src="screenshots/roadmap.png" alt="Roadmap" width="100%"/> (Example of old UI) | *(Placeholder for new feature)* | *(Placeholder for new feature)* |
+| Resume Upload (PDF/JSON) | Generated Roadmap with Timeline |
+|--------------------------|---------------------------------|
+| <img src="screenshots/upload.png" alt="Resume Upload" width="100%"/>| <img src="screenshots/roadmap.png" alt="Roadmap" width="100%"/>
 
 ---
 
