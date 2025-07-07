@@ -2,17 +2,20 @@ import re
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
+import os
 
 # Set custom download path for environments like Streamlit Cloud
-NLTK_DATA_PATH = "/tmp/nltk_data"
+NLTK_DATA_PATH = os.path.join(os.path.dirname(__file__), "nltk_data")
+if not os.path.exists(NLTK_DATA_PATH):
+    os.makedirs(NLTK_DATA_PATH)
 nltk.data.path.append(NLTK_DATA_PATH)
 
 # Download required resources if missing
 for resource in ['punkt', 'stopwords']:
     try:
-        nltk.data.find(f'tokenizers/{resource}' if resource == 'punkt' else f'corpora/{resource}')
+        nltk.data.find(f'tokenizers/{resource}' if resource == 'punkt' else f'corpora/{resource}', paths=[NLTK_DATA_PATH])
     except LookupError:
-        nltk.download(resource, download_dir=NLTK_DATA_PATH)
+        nltk.download(resource, download_dir=NLTK_DATA_PATH, quiet=True)
 
 def analyze_goals(text):
     """Analyze career goals and extract meaningful keywords."""
