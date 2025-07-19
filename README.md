@@ -63,6 +63,7 @@
 - ✅ **Progress Checklist**: Track your learning items with persistent local progress saving.
 - 🎨 **Theming**: Dark/Light Mode Toggle (though currently defaults to a dark theme).
 - 📂 **Download Options**: Export roadmap as `.txt`, enhanced `.pdf` (now includes AI analyses), or `.json`.
+- 🗃️ **Persistent Roadmap Management**: Automatically saves and loads your generated roadmaps, allowing you to revisit and continue your learning journey across sessions.
 - 🔄 **Live Roadmap Editing + Q&A**: Modify and ask questions about your generated roadmap.
 - 🗃️ **Multi-role Support**: Caters to various tech roles (e.g., AI PM, Web Dev, Blockchain).
 
@@ -70,11 +71,7 @@
 
 ## 📸 Screenshots
 
-**Note to Developer (Jules):** Please request the user to update screenshots to reflect the new features. Suggested new screenshots:
-1.  **Main UI with LinkedIn JSON upload option visible.**
-2.  **Roadmap Tab showing the Gantt Chart / Visual Timeline.**
-3.  **Roadmap Tab showing the Smart AI Gap Analysis output.**
-4.  **Job Role Simulator expander with a JD pasted and the Fit Analysis shown.**
+
 
 | Resume Upload (PDF/JSON) | Generated Roadmap with Timeline |
 |--------------------------|---------------------------------|
@@ -167,7 +164,8 @@ pandas # Dependency for Plotly in this use case
 - [x] Download as .txt / .pdf (enhanced) / .json
 - [x] Live Roadmap Editing
 - [x] Interactive Roadmap Q&A
-- [ ] **Next Up: Firebase/Supabase Cloud Sync for Progress & True Shareable Links**
+- [x] Persistent Roadmap Management (Local Storage)
+- [ ] **Next Up: Cloud Sync for Progress & True Shareable Links (e.g., Firebase/Supabase)**
 - [ ] User Accounts / Authentication
 - [ ] Multi-tab Layout (Resume / Roadmap / Export) - *Consider if current tab layout is sufficient or needs redesign.*
 - [ ] .EXE Packaging for Windows

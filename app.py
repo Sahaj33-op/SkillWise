@@ -16,6 +16,28 @@ import google.generativeai as genai
 import plotly.express as px
 from datetime import timedelta
 from smart_gap_analyzer import get_smart_gap_analysis, SmartGapAnalysisError
+import hashlib
+
+ROADMAPS_DB_PATH = os.path.join(os.path.dirname(__file__), "roadmaps_db.json")
+
+# Move these utility functions to the top, after imports
+
+def load_roadmaps_db():
+    if os.path.exists(ROADMAPS_DB_PATH):
+        with open(ROADMAPS_DB_PATH, "r") as f:
+            try:
+                return json.load(f)
+            except Exception:
+                return []
+    return []
+
+def save_roadmaps_db(roadmaps):
+    with open(ROADMAPS_DB_PATH, "w") as f:
+        json.dump(roadmaps, f, indent=2)
+
+def roadmap_id(resume, goal, role):
+    base = (resume.strip() + goal.strip() + role.strip()).encode("utf-8")
+    return hashlib.sha256(base).hexdigest()[:16]
 
 # Load skills data from JSON
 @st.cache_data
@@ -36,6 +58,50 @@ def update_progress(progress_bar, eta_placeholder, current_progress, total_stage
     eta = max(0, estimated_time - elapsed)
     progress_bar.progress(int(progress))
     eta_placeholder.text(f"⏳ {stage_name}... {int(progress)}%")
+
+# Robust progress loading and saving
+import re
+
+def extract_roadmap_tasks(roadmap_text):
+    # Extract checklist tasks from the roadmap text (lines starting with - [ ])
+    tasks = []
+    for line in roadmap_text.splitlines():
+        match = re.match(r"\s*- \[.\] (.+)", line)
+        if match:
+            tasks.append(match.group(1).strip())
+    return tasks
+
+def get_active_roadmap():
+    for r in st.session_state.roadmaps_db:
+        if r.get("active"):
+            return r
+    return None
+
+def sync_progress_from_active_roadmap():
+    active = get_active_roadmap()
+    if active is not None:
+        # Ensure progress field exists and matches current roadmap tasks
+        roadmap_tasks = extract_roadmap_tasks(active["roadmap"])
+        if "progress" not in active or not isinstance(active["progress"], dict):
+            active["progress"] = {task: False for task in roadmap_tasks}
+        else:
+            # Add missing tasks
+            for task in roadmap_tasks:
+                if task not in active["progress"]:
+                    active["progress"][task] = False
+            # Remove tasks not in roadmap
+            for task in list(active["progress"].keys()):
+                if task not in roadmap_tasks:
+                    del active["progress"][task]
+        st.session_state.progress = dict(active["progress"])
+    else:
+        st.session_state.progress = {}
+
+def save_progress_to_active_roadmap():
+    active = get_active_roadmap()
+    if active is not None:
+        active["progress"] = dict(st.session_state.progress)
+        save_roadmaps_db(st.session_state.roadmaps_db)
 
 # Configure Streamlit page
 st.set_page_config(page_title="SkillWise", page_icon="💡", layout="wide", initial_sidebar_state="expanded")
@@ -190,17 +256,6 @@ if st.session_state.first_visit:
     """)
     st.session_state.first_visit = False
 
-# Load progress from file
-def load_progress():
-    if os.path.exists("progress.json"):
-        with open("progress.json", "r") as f:
-            st.session_state.progress = json.load(f)
-
-# Save progress to file
-def save_progress():
-    with open("progress.json", "w") as f:
-        json.dump(st.session_state.progress, f)
-
 # Handle Gemini API key with Submit button and Change option
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -315,72 +370,90 @@ with tab1:
             st.warning("⚠️ Please select a valid role.")
         elif st.session_state.role == "Other" and not st.session_state.custom_role.strip():
             st.warning("⚠️ Please specify a role in the text field.")
-
-        # Define status_container here so it's available for pre-checks
-        # However, Streamlit elements should ideally be created once per run.
-        # For messages that appear *before* processing, st.warning/st.error directly might be better.
-        # Let's refine this. Pre-condition checks will use direct st.warning/error.
-        # status_container will be for the processing block itself.
-
         elif not st.session_state.gemini_api_key:
-            st.error("❌ Please enter a Gemini API key in the sidebar.") # Direct error message
+            st.error("❌ Please enter a Gemini API key in the sidebar.")
         else:
-            st.session_state.is_processing = True
-            # Moved status_container definition inside the processing block
-            processing_status_container = st.empty()
-
-            # Construct the prompt for general roadmap generation
-            prompt = (
-                f"Resume Text:\n{st.session_state.resume_text}\n\n"
-                f"Target Role: {effective_role}\n"
-                f"Career Goal: {st.session_state.goal}\n\n"
-                "Generate a personalized 6-month learning roadmap. Focus on free or low-cost resources. "
-                "Include specific course suggestions (if possible, from platforms like Coursera, edX, YouTube), "
-                "project ideas to build a portfolio, and a general career plan or phases. "
-                "The roadmap should be structured with clear phases, modules, and actionable tasks. "
-                "Indicate estimated durations for tasks or modules (e.g., in weeks or days)."
-            )
-
-            with processing_status_container.container():
-                progress_bar = st.progress(0)
-                eta_placeholder = st.empty()
-
-            start_time = time.time()
-            error_occurred = False
-            
-            try:
-                genai.configure(api_key=st.session_state.gemini_api_key)
-                
-                estimated_duration = st.session_state.generation_time
-                steps = 50
-                for i in range(steps):
-                    progress_val = int((i / steps) * 90)
-                    update_progress(progress_bar, eta_placeholder, progress_val, 100, start_time, estimated_duration, "Generating Roadmap")
-                    time.sleep(estimated_duration / (steps * 10)) # Shortened sleep for faster simulation if needed
-
-                st.session_state.roadmap = generate_roadmap(prompt)
-                
-                update_progress(progress_bar, eta_placeholder, 100, 100, start_time, estimated_duration, "Complete")
-                actual_time = time.time() - start_time
-                st.session_state.generation_time = actual_time
-                
-                processing_status_container.success("✅ Roadmap generated! Check it in the Roadmap tab.")
-                
-            except Exception as e:
-                error_occurred = True
-                # Display error within the specific container, so it persists until next action
-                processing_status_container.error(f"❌ Error generating roadmap: {str(e)}")
-            finally:
-                # Only clear the container if NO error occurred and it was a success message
-                # This is tricky because success message is part of the container.
-                # A better approach: if an error occurs, the error message stays.
-                # If successful, the success message stays until the next action clears it implicitly or explicitly.
-                # For now, if an error occurred, the error message from the except block should remain.
-                # The success message also remains. This is acceptable.
-                # Let's not call .empty() in finally to ensure messages persist.
-                # The container will be replaced/cleared on the next run if the button is pressed again,
-                # or if other parts of the UI update.
-                st.session_state.is_processing = False
+            # --- Persistent Roadmap Management Integration ---
+            new_id = roadmap_id(st.session_state.resume_text, st.session_state.goal, effective_role)
+            found = None
+            for r in st.session_state.roadmaps_db:
+                if r["id"] == new_id:
+                    found = r
+                    break
+            if found:
+                # Load existing
+                for rr in st.session_state.roadmaps_db:
+                    rr["active"] = (rr["id"] == found["id"])
+                    if rr["active"]:
+                        rr["last_accessed"] = datetime.now().isoformat()
+                save_roadmaps_db(st.session_state.roadmaps_db)
+                st.session_state.resume_text = found["resume"]
+                st.session_state.goal = found["goal"]
+                st.session_state.role = found["role"]
+                st.session_state.roadmap = found["roadmap"]
+                # Reset progress for loaded roadmap
+                roadmap_tasks = extract_roadmap_tasks(st.session_state.roadmap)
+                st.session_state.progress = {task: False for task in roadmap_tasks}
+                save_progress_to_active_roadmap()
+                st.success("Loaded existing roadmap for this resume/goal/role. Check it in the Roadmap tab.")
+                st.rerun()
+            else:
+                st.session_state.is_processing = True
+                processing_status_container = st.empty()
+                prompt = (
+                    f"Resume Text:\n{st.session_state.resume_text}\n\n"
+                    f"Target Role: {effective_role}\n"
+                    f"Career Goal: {st.session_state.goal}\n\n"
+                    "Generate a personalized 6-month learning roadmap. Focus on free or low-cost resources. "
+                    "Include specific course suggestions (if possible, from platforms like Coursera, edX, YouTube), "
+                    "project ideas to build a portfolio, and a general career plan or phases. "
+                    "The roadmap should be structured with clear phases, modules, and actionable tasks. "
+                    "Indicate estimated durations for tasks or modules (e.g., in weeks or days)."
+                )
+                with processing_status_container.container():
+                    progress_bar = st.progress(0)
+                    eta_placeholder = st.empty()
+                start_time = time.time()
+                error_occurred = False
+                try:
+                    genai.configure(api_key=st.session_state.gemini_api_key)
+                    estimated_duration = st.session_state.generation_time
+                    steps = 50
+                    for i in range(steps):
+                        progress_val = int((i / steps) * 90)
+                        update_progress(progress_bar, eta_placeholder, progress_val, 100, start_time, estimated_duration, "Generating Roadmap")
+                        time.sleep(estimated_duration / (steps * 10))
+                    st.session_state.roadmap = generate_roadmap(prompt)
+                    # Reset progress for new roadmap
+                    roadmap_tasks = extract_roadmap_tasks(st.session_state.roadmap)
+                    st.session_state.progress = {task: False for task in roadmap_tasks}
+                    save_progress_to_active_roadmap()
+                    update_progress(progress_bar, eta_placeholder, 100, 100, start_time, estimated_duration, "Complete")
+                    actual_time = time.time() - start_time
+                    st.session_state.generation_time = actual_time
+                    processing_status_container.success("✅ Roadmap generated! Check it in the Roadmap tab.")
+                    # Save new roadmap to DB
+                    new_roadmap = {
+                        "id": new_id,
+                        "resume": st.session_state.resume_text,
+                        "goal": st.session_state.goal,
+                        "role": effective_role,
+                        "roadmap": st.session_state.roadmap,
+                        "timestamp": datetime.now().isoformat(),
+                        "last_accessed": datetime.now().isoformat(),
+                        "active": True
+                    }
+                    for rr in st.session_state.roadmaps_db:
+                        rr["active"] = False
+                    st.session_state.roadmaps_db.insert(0, new_roadmap)
+                    save_roadmaps_db(st.session_state.roadmaps_db)
+                    st.success("New roadmap saved and set as active. Check it in the Roadmap tab.")
+                    st.rerun()
+                except Exception as e:
+                    error_occurred = True
+                    processing_status_container.error(f"❌ Error generating roadmap: {str(e)}")
+                finally:
+                    st.session_state.is_processing = False
 
     st.markdown("---")
     # Job Role Simulator Expander
@@ -753,7 +826,7 @@ with tab2:
                         button_label = "Mark as Pending" if current_status else "Mark as Complete"
                         if st.button(button_label, key=f"gantt_toggle_{selected_gantt_task_name}"):
                             st.session_state.progress[target_progress_key] = not current_status
-                            save_progress()
+                            save_progress_to_active_roadmap()
                             st.success(f"Task '{selected_gantt_task_name}' status updated.")
                             st.rerun() # To update Gantt chart color
                     else:
@@ -768,7 +841,7 @@ with tab2:
         st.markdown("---") # Separator before the old progress tracker
 
         st.subheader("📈 Progress Tracker (Checklist)")
-        load_progress() # Ensure progress is loaded
+        sync_progress_from_active_roadmap()
 
         # Re-parse roadmap for checklist section, ensuring keys are consistent.
         # The key challenge is that Gantt parsing might differ slightly from checklist parsing.
@@ -810,7 +883,7 @@ with tab2:
                             )
                             if completed != st.session_state.progress[item_key]:
                                 st.session_state.progress[item_key] = completed
-                                save_progress()
+                                save_progress_to_active_roadmap()
                                 st.rerun() # To update Gantt chart potentially
                         else:
                             st.markdown(content_line) # Non-task lines within a section
@@ -836,7 +909,7 @@ with tab2:
                             )
                             if completed != st.session_state.progress[item_key]:
                                 st.session_state.progress[item_key] = completed
-                                save_progress()
+                                save_progress_to_active_roadmap()
                                 st.rerun()
                         else:
                             st.markdown(content_line)
@@ -873,7 +946,7 @@ with tab2:
                     )
                     if completed != st.session_state.progress[item_key]:
                         st.session_state.progress[item_key] = completed
-                        save_progress()
+                        save_progress_to_active_roadmap()
                         st.rerun()
                 else:
                     st.markdown(content_line)
@@ -894,7 +967,7 @@ with tab2:
                     )
                     if completed != st.session_state.progress[item_key]:
                         st.session_state.progress[item_key] = completed
-                        save_progress()
+                        save_progress_to_active_roadmap()
                         st.rerun()
                 else:
                     st.markdown(content_line)
@@ -1329,7 +1402,7 @@ with tab2:
             f"For now, a local data file (`{local_share_filename}`) has been saved in the app's directory, "
             f"which contains the data for this specific roadmap generation."
         )
-        st.markdown(f"🔗 Potential Future Shareable Link: `https://your-skillwise-app-url.com/shared?id={unique_id}`")
+        st.markdown(f"🔗 Potential Future Shareable Link: `https://skillwise-sahaj33.streamlit.app/shared?id={unique_id}`")
         st.info(f"To actually share, you would need to host the app and implement a way to serve '{local_share_filename}' or its content based on the ID.")
 
     else:
@@ -1347,3 +1420,149 @@ st.markdown("""
     </p>
 </div>
 """, unsafe_allow_html=True)
+
+ROADMAPS_DB_PATH = os.path.join(os.path.dirname(__file__), "roadmaps_db.json")
+
+# --- Persistent Roadmap Management ---
+
+# --- On App Start: Load and display previous roadmaps ---
+if "roadmaps_db" not in st.session_state:
+    st.session_state.roadmaps_db = load_roadmaps_db()
+
+# Find active roadmap
+active_roadmap = None
+for r in st.session_state.roadmaps_db:
+    if r.get("active"):
+        active_roadmap = r
+        break
+
+# If no active roadmap, set the most recent as active
+if not active_roadmap and st.session_state.roadmaps_db:
+    st.session_state.roadmaps_db[0]["active"] = True
+    active_roadmap = st.session_state.roadmaps_db[0]
+    save_roadmaps_db(st.session_state.roadmaps_db)
+
+# Load active roadmap into session
+if active_roadmap:
+    st.session_state.resume_text = active_roadmap["resume"]
+    st.session_state.goal = active_roadmap["goal"]
+    st.session_state.role = active_roadmap["role"]
+    st.session_state.roadmap = active_roadmap["roadmap"]
+
+# --- UI: Recent Roadmaps Sidebar ---
+with st.sidebar:
+    st.markdown("---", unsafe_allow_html=True)
+    st.header("🗂️ Your Recent Roadmaps")
+    # Search/filter box
+    search_query = st.text_input("🔍 Search by role or goal", "")
+    filtered_roadmaps = st.session_state.roadmaps_db
+    if search_query.strip():
+        sq = search_query.lower()
+        filtered_roadmaps = [r for r in st.session_state.roadmaps_db if sq in r["role"].lower() or sq in r["goal"].lower()]
+    # Export all button
+    if filtered_roadmaps:
+        st.download_button(
+            "⬇️ Export All",
+            data=json.dumps(filtered_roadmaps, indent=2),
+            file_name="SkillWise_All_Roadmaps.json",
+            mime="application/json",
+            key="export_all_btn"
+        )
+    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+    if filtered_roadmaps:
+        for idx, r in enumerate(sorted(filtered_roadmaps, key=lambda x: x.get("last_accessed", x["timestamp"]), reverse=True)):
+            is_active = r.get("active", False)
+            with st.container():
+                st.markdown(f"<div style='border:2px solid {'#60a5fa' if is_active else '#444'}; border-radius:10px; padding:10px; margin-bottom:10px; background-color:{'#23234a' if is_active else '#191932'}'>", unsafe_allow_html=True)
+                st.markdown(f"**Role:** {r['role']}  ")
+                st.markdown(f"**Goal:** {r['goal']}  ")
+                st.markdown(f"**Date:** {r['timestamp'][:19].replace('T',' ')}  ")
+                st.markdown(f"**ID:** `{r['id']}`")
+                if is_active:
+                    st.success("Active Roadmap")
+                col1, col2, col3, col4 = st.columns(4)
+                disabled = st.session_state.get("is_processing", False)
+                with col1:
+                    if st.button("▶️ Continue", key=f"cont_{r['id']}", disabled=disabled):
+                        for rr in st.session_state.roadmaps_db:
+                            rr["active"] = (rr["id"] == r["id"])
+                            if rr["active"]:
+                                rr["last_accessed"] = datetime.now().isoformat()
+                        save_roadmaps_db(st.session_state.roadmaps_db)
+                        st.session_state.resume_text = r["resume"]
+                        st.session_state.goal = r["goal"]
+                        st.session_state.role = r["role"]
+                        st.session_state.roadmap = r["roadmap"]
+                        st.toast("Roadmap continued and set as active.")
+                        st.rerun()
+                with col2:
+                    if st.button("🗑️ Delete", key=f"del_{r['id']}", disabled=disabled):
+                        if st.confirm(f"Are you sure you want to delete this roadmap?", key=f"confirm_del_{r['id']}"):
+                            st.session_state.roadmaps_db = [rr for rr in st.session_state.roadmaps_db if rr["id"] != r["id"]]
+                            save_roadmaps_db(st.session_state.roadmaps_db)
+                            st.toast("Roadmap deleted.")
+                            st.rerun()
+                with col3:
+                    st.download_button("💾 Export", data=json.dumps(r, indent=2), file_name=f"SkillWise_Roadmap_{r['id']}.json", mime="application/json", key=f"exp_{r['id']}", disabled=disabled)
+                with col4:
+                    if not is_active and st.button("⭐ Set Active", key=f"set_{r['id']}", disabled=disabled):
+                        for rr in st.session_state.roadmaps_db:
+                            rr["active"] = (rr["id"] == r["id"])
+                            if rr["active"]:
+                                rr["last_accessed"] = datetime.now().isoformat()
+                        save_roadmaps_db(st.session_state.roadmaps_db)
+                        st.session_state.resume_text = r["resume"]
+                        st.session_state.goal = r["goal"]
+                        st.session_state.role = r["role"]
+                        st.session_state.roadmap = r["roadmap"]
+                        st.toast("Roadmap set as active.")
+                        st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
+    else:
+        st.info("No saved roadmaps yet. Generate one to get started!")
+
+# --- On New Roadmap Generation: Check for existing, else create new ---
+# In the code where you generate a new roadmap (after parsing resume, role, goal):
+# Before generating, check if exists
+# (Insert this logic before calling generate_roadmap)
+# ...
+# Example (inside the button click handler):
+#
+# new_id = roadmap_id(st.session_state.resume_text, st.session_state.goal, effective_role)
+# found = None
+# for r in st.session_state.roadmaps_db:
+#     if r["id"] == new_id:
+#         found = r
+#         break
+# if found:
+#     # Load existing
+#     for rr in st.session_state.roadmaps_db:
+#         rr["active"] = (rr["id"] == found["id"])
+#         if rr["active"]:
+#             rr["last_accessed"] = datetime.now().isoformat()
+#     save_roadmaps_db(st.session_state.roadmaps_db)
+#     st.session_state.resume_text = found["resume"]
+#     st.session_state.goal = found["goal"]
+#     st.session_state.role = found["role"]
+#     st.session_state.roadmap = found["roadmap"]
+#     st.success("Loaded existing roadmap for this resume/goal/role.")
+#     st.rerun()
+# else:
+#     # Generate new, then save
+#     # ... after generating roadmap ...
+#     new_roadmap = {
+#         "id": new_id,
+#         "resume": st.session_state.resume_text,
+#         "goal": st.session_state.goal,
+#         "role": effective_role,
+#         "roadmap": st.session_state.roadmap,
+#         "timestamp": datetime.now().isoformat(),
+#         "last_accessed": datetime.now().isoformat(),
+#         "active": True
+#     }
+#     for rr in st.session_state.roadmaps_db:
+#         rr["active"] = False
+#     st.session_state.roadmaps_db.insert(0, new_roadmap)
+#     save_roadmaps_db(st.session_state.roadmaps_db)
+#     st.success("New roadmap saved and set as active.")
+#     st.rerun()

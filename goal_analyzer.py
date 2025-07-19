@@ -1,62 +1,21 @@
-import re
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
 import os
-
-# Set custom download path for environments like Streamlit Cloud
-NLTK_DATA_PATH = os.path.join(os.path.dirname(__file__), "nltk_data")
-if not os.path.exists(NLTK_DATA_PATH):
-    os.makedirs(NLTK_DATA_PATH)
-nltk.data.path.append(NLTK_DATA_PATH)
-
-# Download required resources if missing
-for resource in ['punkt', 'stopwords']:
-    try:
-        nltk.data.find(f'tokenizers/{resource}' if resource == 'punkt' else f'corpora/{resource}', paths=[NLTK_DATA_PATH])
-    except LookupError:
-        nltk.download(resource, download_dir=NLTK_DATA_PATH, quiet=True)
+import google.generativeai as genai
 
 def analyze_goals(text):
-    """Analyze career goals and extract meaningful keywords."""
+    """Analyze career goals using Gemini AI model."""
     if not text or not isinstance(text, str):
         return "⚠️ Please provide a valid career goal text."
-        
     try:
-        # Clean and normalize text
-        text = text.lower().strip()
-        if not text:
-            return "⚠️ Empty goal text provided."
-            
-        # Tokenize and filter words
-        words = word_tokenize(text, language='english')
-        filtered_words = [
-            word for word in words
-            if word.isalnum() and 
-            word not in stopwords.words('english') and
-            len(word) > 2
-        ]
-        
-        # Extract unique keywords
-        keywords = sorted(set(filtered_words))
-        
-        if not keywords:
-            return "⚠️ No meaningful keywords extracted from your goal. Please provide more specific details."
-            
-        # Categorize
-        tech_keywords = [k for k in keywords if any(tech in k for tech in ['dev', 'code', 'program', 'software', 'data', 'ai', 'ml', 'web', 'cloud'])]
-        role_keywords = [k for k in keywords if any(role in k for role in ['engineer', 'developer', 'architect', 'manager', 'analyst', 'designer'])]
-        other_keywords = [k for k in keywords if k not in tech_keywords and k not in role_keywords]
-        
-        output = "🔍 Keywords extracted from your goal:\n\n"
-        if tech_keywords:
-            output += f"💻 Technical Skills: {', '.join(tech_keywords)}\n"
-        if role_keywords:
-            output += f"👨‍💼 Roles: {', '.join(role_keywords)}\n"
-        if other_keywords:
-            output += f"📌 Other Keywords: {', '.join(other_keywords)}"
-            
-        return output
-        
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return "⚠️ Gemini API key not set. Please enter it in the sidebar."
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        prompt = (
+            f"Analyze the following career goal and extract the main skills, roles, and relevant keywords. "
+            f"Present the analysis in a clear, user-friendly way:\n\n{text}"
+        )
+        response = model.generate_content(prompt)
+        return response.text.strip()
     except Exception as e:
-        return f"⚠️ Error analyzing goal: {str(e)}"
+        return f"⚠️ Error analyzing goal with AI: {str(e)}"
