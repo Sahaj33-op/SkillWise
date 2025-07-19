@@ -1514,7 +1514,7 @@ with st.sidebar:
                                     st.rerun()
                             with col_confirm_no:
                                 if st.button("No, Cancel", key=f"confirm_no_{r['id']}"):
-                                    del st.session_state[f'confirm_delete_{r["id\']}'] # Clear confirmation state
+                                    del st.session_state[f'confirm_delete_{r["id"]}'] # Clear confirmation state
                                     st.rerun()
                 with col3:
                     st.download_button("💾 Export", data=json.dumps(r, indent=2), file_name=f"SkillWise_Roadmap_{r['id']}.json", mime="application/json", key=f"exp_{r['id']}", disabled=disabled)
