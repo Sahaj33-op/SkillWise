@@ -289,7 +289,7 @@ with tab1:
         if "Error analyzing goal" in goal_analysis:
             st.warning("⚠️ There was an issue analyzing your goal. Please ensure NLTK data is correctly set up or try a different goal.")
         else:
-            st.markdown(goal_analysis)
+
     st.subheader("📚 Select Tech Role")
     roles = [
         "Select a tech role",
