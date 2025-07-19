@@ -1495,14 +1495,13 @@ with st.sidebar:
                         st.toast("Roadmap continued and set as active.")
                         st.rerun()
                 with col2:
-                    if st.button("🗑️ Delete", key=f"del_{r['id']}", disabled=disabled):
-                        # Replace st.confirm with a two-step confirmation using st.button
+                    if not st.session_state.get(f'confirm_delete_{r["id"]}'):
                         if st.button("🗑️ Delete", key=f"del_{r['id']}", disabled=disabled):
-                            # Use a session state variable to track if confirmation is pending for this roadmap
                             st.session_state[f'confirm_delete_{r["id"]}'] = True
                             st.rerun()
-
-                        if st.session_state.get(f'confirm_delete_{r["id"]}'):
+                    else:
+                        # Confirmation is pending, show confirmation dialog
+                        
                             st.warning(f"Are you sure you want to delete the roadmap for '{r['goal']}' ({r['role']})?")
                             col_confirm_yes, col_confirm_no = st.columns(2)
                             with col_confirm_yes:
