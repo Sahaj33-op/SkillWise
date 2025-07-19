@@ -391,7 +391,6 @@ with tab1:
                 st.session_state.goal = found["goal"]
                 st.session_state.role = found["role"]
                 st.session_state.roadmap = found["roadmap"]
-                st.session_state.title = found.get("title", f"{found['goal']} for {found['role']}") # Load title or generate if missing
                 # Reset progress for loaded roadmap
                 roadmap_tasks = extract_roadmap_tasks(st.session_state.roadmap)
                 st.session_state.progress = {task: False for task in roadmap_tasks}
@@ -436,7 +435,6 @@ with tab1:
                     # Save new roadmap to DB
                     new_roadmap = {
                         "id": new_id,
-                        "title": f"{st.session_state.goal} for {effective_role}", # Auto-generated title
                         "resume": st.session_state.resume_text,
                         "goal": st.session_state.goal,
                         "role": effective_role,
@@ -550,60 +548,22 @@ with tab1:
 with tab2:
     if st.session_state.roadmap:
         st.header("🗺️ Your AI-Powered Learning Roadmap")
+        
+        required_skills = {}
+        default_skills = []
+        expanded_skill_terms = {}
+        course_recommendations = {}
+        skills_to_check = [] # Initialize to an empty list
 
-        # Initialize checklist state for the current roadmap if not present
-        current_roadmap_id = roadmap_id(st.session_state.resume_text, st.session_state.goal, effective_role)
-        if "checklist_status" not in st.session_state or st.session_state.get("current_roadmap_checklist_id") != current_roadmap_id:
-            st.session_state.checklist_status = {}
-            st.session_state.current_roadmap_checklist_id = current_roadmap_id
-            # Populate checklist_status from saved roadmap data if available
-            for r in st.session_state.roadmaps_db:
-                if r["id"] == current_roadmap_id and "checklist_status" in r:
-                    st.session_state.checklist_status = r["checklist_status"]
-                    break
+        if isinstance(skills_data, dict) and skills_data:
+            required_skills = skills_data.get("required_skills", {})
+            default_skills = skills_data.get("default_skills", [])
+            expanded_skill_terms = skills_data.get("expanded_skill_terms", {})
+            course_recommendations = skills_data.get("course_recommendations", {})
 
-        # Function to update checklist status
-        def update_checklist_item(item_key):
-            st.session_state.checklist_status[item_key] = not st.session_state.checklist_status.get(item_key, False)
-            # Save the updated checklist status to the current active roadmap in roadmaps_db
-            for r in st.session_state.roadmaps_db:
-                if r["id"] == current_roadmap_id:
-                    r["checklist_status"] = st.session_state.checklist_status
-                    save_roadmaps_db(st.session_state.roadmaps_db)
-                    break
-
-        # Display roadmap with checkboxes
-        st.subheader("📈 Progress Tracker")
-        roadmap_lines = st.session_state.roadmap.split('\n')
-        for i, line in enumerate(roadmap_lines):
-            line = line.strip()
-            if not line:
-                continue
-
-            # Generate a unique key for each checklist item
-            item_key = f"roadmap_item_{current_roadmap_id}_{i}"
-
-            if line.startswith("## ") or (line.startswith("**") and line.endswith("**")):
-                # Phase or Subsection header - display as markdown, not a checkbox
-                st.markdown(line)
-            elif line.startswith("-") or line.startswith("*") or line.startswith("•"):
-                # Main bullet point - display as checkbox
-                display_text = line.lstrip('-*• ').strip()
-                checked = st.session_state.checklist_status.get(item_key, False)
-                new_checked = st.checkbox(display_text, value=checked, key=item_key, on_change=update_checklist_item, args=(item_key,))
-                if new_checked != checked:
-                    # This condition is technically redundant due to on_change, but good for clarity
-                    st.session_state.checklist_status[item_key] = new_checked
-            elif line.startswith("  -") or line.startswith("  *") or line.startswith("  •"):
-                # Sub-bullet point - display as indented checkbox
-                display_text = line.lstrip(' -*•').strip()
-                checked = st.session_state.checklist_status.get(item_key, False)
-                new_checked = st.checkbox(f"  {display_text}", value=checked, key=item_key, on_change=update_checklist_item, args=(item_key,))
-                if new_checked != checked:
-                    st.session_state.checklist_status[item_key] = new_checked
-            else:
-                # Any other text, display as markdown
-                st.markdown(line)
+            skills_to_check = required_skills.get(effective_role, default_skills)
+        else:
+            st.warning("⚠️ Skill data could not be loaded. Please check 'skills_data.json'.")
 
         # Smart AI Gap Detector
         st.subheader("🤖 Smart AI Gap Analysis")
@@ -1241,15 +1201,6 @@ with tab2:
                 c, title_text, left_margin, y_position,
                 content_width, "Helvetica-Bold", 28, line_spacing=32 # Increased line spacing for main title
             )
-
-            # Add Role and Goal to PDF
-            role_text = f"Role: {st.session_state.effective_role}"
-            goal_text = f"Goal: {st.session_state.goal}"
-            c.setFont("Helvetica", 12)
-            c.setFillColor(text_color)
-            y_position = wrap_text(c, role_text, left_margin, y_position - 0.2 * inch, content_width, "Helvetica", 12, 14)
-            y_position = wrap_text(c, goal_text, left_margin, y_position, content_width, "Helvetica", 12, 14)
-            y_position -= 0.5 * inch # Add some space after role and goal
             y_position -= 0.3 * inch
 
             # Generation date with enhanced styling
@@ -1406,21 +1357,23 @@ with tab2:
                         "Helvetica", 11, line_spacing=14
                     )
 
-            # Finalize PDF
             draw_footer(page_num)
             c.save()
             pdf_bytes = buffer.getvalue()
             buffer.close()
             return pdf_bytes
 
-        # PDF download button
-        pdf_bytes = generate_pdf()
-        st.download_button(
-            label="📄 Download as PDF",
-            data=pdf_bytes,
-            file_name="SkillWise_Roadmap.pdf",
-            mime="application/pdf"
-        )
+        if st.button("📄 Download as PDF"):
+            try:
+                pdf_bytes = generate_pdf()
+                st.download_button(
+                    label="📄 Click to Download PDF",
+                    data=pdf_bytes,
+                    file_name="SkillWise_Roadmap.pdf",
+                    mime="application/pdf"
+                )
+            except Exception as e:
+                st.error(f"❌ Error generating PDF: {str(e)}")
         
         roadmap_data = {
             "resume": st.session_state.resume_text,
@@ -1521,7 +1474,8 @@ with st.sidebar:
             is_active = r.get("active", False)
             with st.container():
                 st.markdown(f"<div style='border:2px solid {'#60a5fa' if is_active else '#444'}; border-radius:10px; padding:10px; margin-bottom:10px; background-color:{'#23234a' if is_active else '#191932'}'>", unsafe_allow_html=True)
-                st.markdown(f"**Title:** {r.get('title', f"{r['goal']} for {r['role']}")}  ")
+                st.markdown(f"**Role:** {r['role']}  ")
+                st.markdown(f"**Goal:** {r['goal']}  ")
                 st.markdown(f"**Date:** {r['timestamp'][:19].replace('T',' ')}  ")
                 st.markdown(f"**ID:** `{r['id']}`")
                 if is_active:
