@@ -1502,7 +1502,7 @@ with st.sidebar:
                             st.session_state[f'confirm_delete_{r["id"]}'] = True
                             st.rerun()
 
-                        if st.session_state.get(f'confirm_delete_{r["id\']}'):
+                        if st.session_state.get(f'confirm_delete_{r["id"]}'):
                             st.warning(f"Are you sure you want to delete the roadmap for '{r['goal']}' ({r['role']})?")
                             col_confirm_yes, col_confirm_no = st.columns(2)
                             with col_confirm_yes:
