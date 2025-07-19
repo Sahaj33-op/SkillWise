@@ -20,7 +20,6 @@ import hashlib
 
 ROADMAPS_DB_PATH = os.path.join(os.path.dirname(__file__), "roadmaps_db.json")
 
-# Move these utility functions to the top, after imports
 
 def load_roadmaps_db():
     if os.path.exists(ROADMAPS_DB_PATH):
@@ -1497,11 +1496,26 @@ with st.sidebar:
                         st.rerun()
                 with col2:
                     if st.button("🗑️ Delete", key=f"del_{r['id']}", disabled=disabled):
-                        if st.confirm(f"Are you sure you want to delete this roadmap?", key=f"confirm_del_{r['id']}"):
-                            st.session_state.roadmaps_db = [rr for rr in st.session_state.roadmaps_db if rr["id"] != r["id"]]
-                            save_roadmaps_db(st.session_state.roadmaps_db)
-                            st.toast("Roadmap deleted.")
+                        # Replace st.confirm with a two-step confirmation using st.button
+                        if st.button("🗑️ Delete", key=f"del_{r['id']}", disabled=disabled):
+                            # Use a session state variable to track if confirmation is pending for this roadmap
+                            st.session_state[f'confirm_delete_{r["id"]}'] = True
                             st.rerun()
+
+                        if st.session_state.get(f'confirm_delete_{r["id\']}'):
+                            st.warning(f"Are you sure you want to delete the roadmap for '{r['goal']}' ({r['role']})?")
+                            col_confirm_yes, col_confirm_no = st.columns(2)
+                            with col_confirm_yes:
+                                if st.button("Yes, Delete", key=f"confirm_yes_{r['id']}"):
+                                    st.session_state.roadmaps_db = [rr for rr in st.session_state.roadmaps_db if rr["id"] != r["id"]]
+                                    save_roadmaps_db(st.session_state.roadmaps_db)
+                                    st.toast("Roadmap deleted.")
+                                    del st.session_state[f'confirm_delete_{r["id"]}'] # Clear confirmation state
+                                    st.rerun()
+                            with col_confirm_no:
+                                if st.button("No, Cancel", key=f"confirm_no_{r['id']}"):
+                                    del st.session_state[f'confirm_delete_{r["id\']}'] # Clear confirmation state
+                                    st.rerun()
                 with col3:
                     st.download_button("💾 Export", data=json.dumps(r, indent=2), file_name=f"SkillWise_Roadmap_{r['id']}.json", mime="application/json", key=f"exp_{r['id']}", disabled=disabled)
                 with col4:
