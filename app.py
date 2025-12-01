@@ -110,105 +110,8 @@ with open('style.css') as f:
     st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
 
 # Additional custom styles
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+st.markdown('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">', unsafe_allow_html=True)
 
-.stApp {
-    background-color: #1a1a2e;
-    color: #e0e0e0;
-    font-family: 'Roboto', sans-serif;
-}
-h1, h2, h3, h4, h5, h6 {
-    color: #ffffff;
-    font-weight: 500;
-}
-.stTextInput input, .stSelectbox div, .stTextArea textarea {
-    background-color: #2d2d44 !important;
-    color: #e0e0e0 !important;
-    border: none !important;
-    border-radius: 8px;
-    transition: border-color 0.3s ease;
-}
-.stTextInput input:focus, .stSelectbox div:focus, .stTextArea textarea:focus {
-    border: none !important;
-    box-shadow: 0 0 5px rgba(96, 165, 250, 0.5) !important;
-}
-div[data-testid="stFileUploaderDropzone"] {
-    background-color: #3b3b5a !important;
-    border: 2px dashed #60a5fa !important;
-    color: #e0e0e0 !important;
-    border-radius: 8px;
-}
-div[data-testid="stTabs"] button {
-    background-color: #2d2d44;
-    color: #e0e0e0;
-    border-radius: 8px 8px 0 0;
-    transition: background-color 0.3s ease;
-}
-div[data-testid="stTabs"] button:hover {
-    background-color: #4a69bd;
-}
-div[data-testid="stTabs"] button p {
-    font-size: 18px !important;
-    font-weight: 500 !important;
-}
-div[data-testid="stTab"] {
-    background-color: none;
-    padding: 20px;
-    border-radius: 8px;
-}
-.stProgress .st-bo {
-    background-color: #4a69bd !important;
-}
-.stProgress .st-bo > div {
-    background-color: #60a5fa !important;
-}
-.stCheckbox label p {
-    font-size: 14px !important;
-    color: #e0e0e0;
-}
-.footer {
-    background-color: #2d2d44;
-    padding: 20px;
-    text-align: center;
-    border-top: 1px solid #4a69bd;
-    margin-top: 40px;
-    border-radius: 8px;
-}
-.footer p {
-    margin: 10px 0;
-    font-size: 14px;
-    color: #b0b0b0;
-}
-.footer a {
-    color: #4a69bd;
-    text-decoration: none;
-    margin: 0 10px;
-    transition: color 0.3s ease;
-}
-.footer a:hover {
-    color: #60a5fa;
-}
-.social-icons a {
-    margin: 0 15px;
-    font-size: 20px;
-    color: #b0b0b0;
-    transition: color 0.3s ease;
-}
-.social-icons a:hover {
-    color: #60a5fa;
-}
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-.stMarkdown, .stSuccess, .stInfo, .stWarning, .stError {
-    animation: fadeIn 0.5s ease-in-out;
-}
-</style>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-""", unsafe_allow_html=True)
 
 # Initialize session state
 if "roadmap" not in st.session_state:
@@ -227,8 +130,7 @@ if "gemini_api_key" not in st.session_state:
     st.session_state.gemini_api_key = os.getenv("GEMINI_API_KEY", "")
 if "progress" not in st.session_state:
     st.session_state.progress = {}
-if "editing_section" not in st.session_state:
-    st.session_state.editing_section = None
+
 if "generation_time" not in st.session_state:
     st.session_state.generation_time = 10.0
 if "first_visit" not in st.session_state:
@@ -273,47 +175,58 @@ with st.sidebar:
         if st.button("🔄 Change API Key"):
             st.session_state.gemini_api_key = ""
             st.rerun()
+        
 
-st.title("🧠 SkillWise: AI-Powered Learning Path Generator")
+
+st.markdown("""
+    <div style="text-align: center; padding: 2rem 0; margin-bottom: 2rem;">
+        <h1 style="font-size: 3.5rem; background: linear-gradient(to right, #6366f1, #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 0.5rem; font-family: 'Outfit', sans-serif; font-weight: 700;">SkillWise</h1>
+        <p style="font-size: 1.2rem; color: #94a3b8; font-family: 'Inter', sans-serif;">AI-Powered Learning Path Generator</p>
+    </div>
+""", unsafe_allow_html=True)
 
 # Tabs
 tab1, tab2 = st.tabs(["Resume", "Roadmap"])
 
 # Resume Tab
 with tab1:
-    st.subheader("🎯 Select Career Goal")
-    st.session_state.goal = st.text_input("What role are you targeting?", placeholder="e.g., AI Developer, Product Manager", value=st.session_state.goal)
-    if st.session_state.goal.strip():
-        goal_analysis = analyze_goals(st.session_state.goal)
-        # Check for the specific NLTK error message
-        if "Error analyzing goal" in goal_analysis:
-            st.warning("⚠️ There was an issue analyzing your goal. Please ensure NLTK data is correctly set up or try a different goal.")
-        else:
-            pass
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.subheader("🎯 Select Career Goal")
+        st.session_state.goal = st.text_input("What role are you targeting?", placeholder="e.g., AI Developer, Product Manager", value=st.session_state.goal)
+        if st.session_state.goal.strip():
+            goal_analysis = analyze_goals(st.session_state.goal)
+            # Check for the specific NLTK error message
+            if "Error analyzing goal" in goal_analysis:
+                st.warning("⚠️ There was an issue analyzing your goal. Please ensure NLTK data is correctly set up or try a different goal.")
+            else:
+                pass
 
-    st.subheader("📚 Select Tech Role")
-    roles = [
-        "Select a tech role",
-        "AI Engineer",
-        "Frontend Developer",
-        "Backend Developer",
-        "Full Stack Developer",
-        "Product Manager",
-        "Data Analyst",
-        "Cybersecurity Expert",
-        "DevOps Engineer",
-        "UI/UX Designer",
-        "Machine Learning Engineer",
-        "Blockchain Developer",
-        "Cloud Architect",
-        "Data Scientist",
-        "Software Engineer",
-        "Mobile App Developer",
-        "Other"
-    ]
-    st.session_state.role = st.selectbox("Choose a role", roles, index=roles.index(st.session_state.role) if st.session_state.role in roles else 0)
-    if st.session_state.role == "Other":
-        st.session_state.custom_role = st.text_input("Please specify your role", placeholder="e.g., Game Developer", value=st.session_state.custom_role)
+    with col2:
+        st.subheader("📚 Select Tech Role")
+        roles = [
+            "Select a tech role",
+            "AI Engineer",
+            "Frontend Developer",
+            "Backend Developer",
+            "Full Stack Developer",
+            "Product Manager",
+            "Data Analyst",
+            "Cybersecurity Expert",
+            "DevOps Engineer",
+            "UI/UX Designer",
+            "Machine Learning Engineer",
+            "Blockchain Developer",
+            "Cloud Architect",
+            "Data Scientist",
+            "Software Engineer",
+            "Mobile App Developer",
+            "Other"
+        ]
+        st.session_state.role = st.selectbox("Choose a role", roles, index=roles.index(st.session_state.role) if st.session_state.role in roles else 0)
+        if st.session_state.role == "Other":
+            st.session_state.custom_role = st.text_input("Please specify your role", placeholder="e.g., Game Developer", value=st.session_state.custom_role)
+    
     effective_role = st.session_state.custom_role if st.session_state.role == "Other" and st.session_state.custom_role else st.session_state.role
     st.subheader("📄 Upload Your Resume")
     uploaded_file = st.file_uploader("Upload your resume (PDF or LinkedIn JSON)", type=["pdf", "json"])
@@ -461,8 +374,7 @@ with tab1:
         st.subheader("Simulate Your Fit for a Specific Job")
         jd_text_input = st.text_area("Paste Job Description Text Here:", height=200, key="jd_text_input",
                                      help="Paste the full text of the job description you are interested in.")
-        # jd_url_input = st.text_input("Or Enter Job Description URL (Experimental):", key="jd_url_input",
-        #                              help="Pasting text is more reliable. URL fetching might not always work.")
+
 
         if st.button("🚀 Analyze Fit & Generate Focused Roadmap", key="analyze_jd_button"):
             if not st.session_state.parsed_resume:
@@ -473,20 +385,7 @@ with tab1:
                 st.error("❌ Please enter a Gemini API key in the sidebar.")
             else:
                 job_description_content = jd_text_input.strip()
-                # if jd_url_input.strip() and not job_description_content:
-                #     with st.spinner(f"Fetching job description from URL: {jd_url_input}..."):
-                #         try:
-                #             # TODO: Implement view_text_website carefully - it's a tool call
-                #             # For now, this part is conceptual for URL fetching.
-                #             # job_description_content = view_text_website(jd_url_input) # This needs to be a tool call
-                #             st.info("URL fetching is illustrative. Actual implementation requires a tool call and error handling.")
-                #             # Simulate fetched content for now if you don't make the actual call in this step:
-                #             # job_description_content = "Simulated fetched JD content for " + jd_url_input
-                #             # st.text_area("Fetched JD (for review):", value=job_description_content, height=150, disabled=True)
-                #             pass # Placeholder for actual fetching logic
-                #         except Exception as e:
-                #             st.error(f"Failed to fetch from URL: {e}")
-                #             job_description_content = "" # Ensure it's empty on failure
+
 
                 if job_description_content:
                     st.session_state.is_processing_jd = True # New state variable for JD processing
@@ -503,7 +402,7 @@ with tab1:
                                     "Highlight key strengths and specific gaps or missing qualifications relevant to this job. "
                                     "Conclude with a percentage fit score (e.g., Fit Score: 75%)."
                                 )
-                                model = genai.GenerativeModel("gemini-1.5-flash") # Ensure model is configured
+                                model = genai.GenerativeModel("gemini-2.0-flash") # Ensure model is configured
                                 response_fit = model.generate_content(fit_analysis_prompt)
                                 st.session_state.job_fit_analysis = response_fit.text.strip()
                                 st.markdown(st.session_state.job_fit_analysis)
@@ -540,8 +439,8 @@ with tab1:
                                     st.error(f"Error generating focused roadmap: {e}")
                                     st.session_state.focused_jd_roadmap = None
                     st.session_state.is_processing_jd = False
-                elif not jd_text_input.strip(): # Only show if URL was primary and failed, and text is also empty
-                     st.warning("Please paste the job description text if URL fetching failed or was not used.")
+                elif not jd_text_input.strip():
+                     st.warning("Please paste the job description text.")
 
 
 # Roadmap Tab
@@ -746,17 +645,18 @@ with tab2:
                 color="Status",
                 title="Project Timeline",
                 hover_name="Task",
-                color_discrete_map={"Completed": "green", "Pending": "orange", "Overdue": "red"}, # Add more statuses if needed
+                color_discrete_map={"Completed": "#10b981", "Pending": "#f59e0b", "Overdue": "#ef4444"}, 
                 category_orders={"Task": df_gantt.sort_values(by="Start")["Task"].tolist()} # Preserve order
             )
             fig_gantt.update_yaxes(autorange="reversed") # To display tasks from top to bottom
             fig_gantt.update_layout(
                 title_font_size=20,
-                font_size=10,
-                plot_bgcolor='rgba(45,45,68,1)', # Match app's dark theme
-                paper_bgcolor='rgba(45,45,68,1)',# Match app's dark theme
-                font_color="white",
-                legend_title_text='Task Status'
+                font_size=12,
+                plot_bgcolor='rgba(15, 23, 42, 0.4)', 
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color="#f8fafc",
+                legend_title_text='Task Status',
+                font_family="Inter"
             )
             st.plotly_chart(fig_gantt, use_container_width=True)
 
@@ -832,9 +732,7 @@ with tab2:
                     else:
                         st.warning(f"Could not reliably link '{selected_gantt_task_name}' to progress tracker. Progress key: {target_progress_key}")
 
-                with col_gantt_action2:
-                    if st.button(f"⏰ Remind Me: {selected_gantt_task_name}", key=f"gantt_remind_{selected_gantt_task_name}"):
-                        st.toast(f"Reminder set for '{selected_gantt_task_name}' (feature in development).")
+
         else:
             st.info("No tasks found in the roadmap to display on the timeline.")
 
@@ -973,43 +871,7 @@ with tab2:
                     st.markdown(content_line)
 
 
-        if st.session_state.editing_section is not None:
-            # Editing logic needs to be adjusted if indices change due to Gantt chart display
-            # For now, this part is less critical for the Gantt feature itself.
-            # The original editing logic might still work if it's based on raw roadmap_lines indices.
-            # However, `st.rerun()` from Gantt chart actions might interfere if not handled carefully.
-            # To simplify, I'll keep the original editing logic but note it might need review.
-            # For this step, focusing on Gantt display and basic interaction.
-            # --- Original Editing Logic ---
-            edit_index = st.session_state.editing_section
-            section_line = roadmap_lines[edit_index]
-            st.subheader(f"Editing Section: {section_line[2:]}")
-            new_text = st.text_area("Reword this section:", value=section_line[2:])
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                if st.button("Save Changes"):
-                    roadmap_lines[edit_index] = f"**{new_text}"
-                    st.session_state.roadmap = "\n".join(roadmap_lines)
-                    st.session_state.editing_section = None
-                    st.rerun()
-            with col2:
-                if st.button("Regenerate Section"):
-                    if st.session_state.gemini_api_key:
-                        with st.spinner("Regenerating section..."):
-                            genai.configure(api_key=st.session_state.gemini_api_key)
-                            model = genai.GenerativeModel("gemini-1.5-flash")
-                            prompt = f"Rewrite this roadmap section for {effective_role}: {section_line[2:]}"
-                            response = model.generate_content(prompt)
-                            roadmap_lines[edit_index] = f"**{response.text.strip()}"
-                            st.session_state.roadmap = "\n".join(roadmap_lines)
-                            st.session_state.editing_section = None
-                            st.rerun()
-                    else:
-                        st.error("❌ Please enter a Gemini API key in the sidebar.")
-            with col3:
-                if st.button("Cancel"):
-                    st.session_state.editing_section = None
-                    st.rerun()
+
         st.subheader("❓ Ask About Your Roadmap")
         question = st.text_input("Enter your question (e.g., 'How long will SQL take?')")
         if st.button("Get Answer"):
@@ -1027,12 +889,7 @@ with tab2:
                         st.error(f"❌ Error fetching answer: {e}")
             else:
                 st.warning("⚠️ Please enter a question.")
-        st.subheader("💬 Was this helpful?")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.button("👍 Yes")
-        with col2:
-            st.button("👎 No")
+
         st.subheader("📥 Export Your Roadmap")
         st.download_button(
             label="📄 Download as TXT",
@@ -1389,21 +1246,7 @@ with tab2:
             mime="application/json"
         )
         
-        unique_id = hash(st.session_state.roadmap + st.session_state.resume_text + effective_role) % 1000000 # Make hash more unique
 
-        # Save roadmap data locally (for now, this is not truly shareable across users/sessions without a backend)
-        local_share_filename = f"shared_roadmap_data_{unique_id}.json"
-        with open(local_share_filename, "w") as f:
-            json.dump(roadmap_data, f)
-
-        st.markdown(
-            f"**Note on Sharing:** The 'Shareable Link' below is a placeholder for a future feature. "
-            f"True sharing requires backend integration (coming soon with Supabase!). "
-            f"For now, a local data file (`{local_share_filename}`) has been saved in the app's directory, "
-            f"which contains the data for this specific roadmap generation."
-        )
-        st.markdown(f"🔗 Potential Future Shareable Link: `https://skillwise-sahaj33.streamlit.app/shared?id={unique_id}`")
-        st.info(f"To actually share, you would need to host the app and implement a way to serve '{local_share_filename}' or its content based on the ID.")
 
     else:
         st.info("🚧 Generate a roadmap in the Resume tab.")
@@ -1480,46 +1323,49 @@ with st.sidebar:
                 st.markdown(f"**ID:** `{r['id']}`")
                 if is_active:
                     st.success("Active Roadmap")
-                col1, col2, col3, col4 = st.columns(4)
+                
                 disabled = st.session_state.get("is_processing", False)
-                with col1:
-                    if st.button("▶️ Continue", key=f"cont_{r['id']}", disabled=disabled):
-                        for rr in st.session_state.roadmaps_db:
-                            rr["active"] = (rr["id"] == r["id"])
-                            if rr["active"]:
-                                rr["last_accessed"] = datetime.now().isoformat()
-                        save_roadmaps_db(st.session_state.roadmaps_db)
-                        st.session_state.resume_text = r["resume"]
-                        st.session_state.goal = r["goal"]
-                        st.session_state.role = r["role"]
-                        st.session_state.roadmap = r["roadmap"]
-                        st.toast("Roadmap continued and set as active.")
+
+                # Continue Button
+                if st.button("Continue", key=f"cont_{r['id']}", disabled=disabled):
+                    for rr in st.session_state.roadmaps_db:
+                        rr["active"] = (rr["id"] == r["id"])
+                        if rr["active"]:
+                            rr["last_accessed"] = datetime.now().isoformat()
+                    save_roadmaps_db(st.session_state.roadmaps_db)
+                    st.session_state.resume_text = r["resume"]
+                    st.session_state.goal = r["goal"]
+                    st.session_state.role = r["role"]
+                    st.session_state.roadmap = r["roadmap"]
+                    st.toast("Roadmap continued and set as active.")
+                    st.rerun()
+
+                # Delete Button
+                if not st.session_state.get(f'confirm_delete_{r["id"]}'):
+                    if st.button("Delete", key=f"del_{r['id']}", disabled=disabled):
+                        st.session_state[f'confirm_delete_{r["id"]}'] = True
                         st.rerun()
-                with col2:
-                    if not st.session_state.get(f'confirm_delete_{r["id"]}'):
-                        if st.button("🗑️ Delete", key=f"del_{r['id']}", disabled=disabled):
-                            st.session_state[f'confirm_delete_{r["id"]}'] = True
+                else:
+                    st.warning(f"Delete '{r['goal']}'?")
+                    col_confirm_yes, col_confirm_no = st.columns(2)
+                    with col_confirm_yes:
+                        if st.button("Yes", key=f"confirm_yes_{r['id']}"):
+                            st.session_state.roadmaps_db = [rr for rr in st.session_state.roadmaps_db if rr["id"] != r["id"]]
+                            save_roadmaps_db(st.session_state.roadmaps_db)
+                            st.toast("Roadmap deleted.")
+                            del st.session_state[f'confirm_delete_{r["id"]}']
                             st.rerun()
-                    else:
-                        # Confirmation is pending, show confirmation dialog
-                        
-                            st.warning(f"Are you sure you want to delete the roadmap for '{r['goal']}' ({r['role']})?")
-                            col_confirm_yes, col_confirm_no = st.columns(2)
-                            with col_confirm_yes:
-                                if st.button("Yes, Delete", key=f"confirm_yes_{r['id']}"):
-                                    st.session_state.roadmaps_db = [rr for rr in st.session_state.roadmaps_db if rr["id"] != r["id"]]
-                                    save_roadmaps_db(st.session_state.roadmaps_db)
-                                    st.toast("Roadmap deleted.")
-                                    del st.session_state[f'confirm_delete_{r["id"]}'] # Clear confirmation state
-                                    st.rerun()
-                            with col_confirm_no:
-                                if st.button("No, Cancel", key=f"confirm_no_{r['id']}"):
-                                    del st.session_state[f'confirm_delete_{r["id"]}'] # Clear confirmation state
-                                    st.rerun()
-                with col3:
-                    st.download_button("💾 Export", data=json.dumps(r, indent=2), file_name=f"SkillWise_Roadmap_{r['id']}.json", mime="application/json", key=f"exp_{r['id']}", disabled=disabled)
-                with col4:
-                    if not is_active and st.button("⭐ Set Active", key=f"set_{r['id']}", disabled=disabled):
+                    with col_confirm_no:
+                        if st.button("No", key=f"confirm_no_{r['id']}"):
+                            del st.session_state[f'confirm_delete_{r["id"]}']
+                            st.rerun()
+
+                # Export Button
+                st.download_button("Export", data=json.dumps(r, indent=2), file_name=f"SkillWise_Roadmap_{r['id']}.json", mime="application/json", key=f"exp_{r['id']}", disabled=disabled)
+
+                # Set Active Button
+                if not is_active:
+                    if st.button("⭐ Set Active", key=f"set_{r['id']}", disabled=disabled):
                         for rr in st.session_state.roadmaps_db:
                             rr["active"] = (rr["id"] == r["id"])
                             if rr["active"]:

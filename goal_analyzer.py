@@ -10,7 +10,7 @@ def analyze_goals(text):
         if not api_key:
             return "⚠️ Gemini API key not set. Please enter it in the sidebar."
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         prompt = (
             f"Analyze the following career goal and extract the main skills, roles, and relevant keywords. "
             f"Present the analysis in a clear, user-friendly way:\n\n{text}"

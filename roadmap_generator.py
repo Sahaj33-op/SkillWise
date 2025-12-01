@@ -40,7 +40,7 @@ def generate_roadmap(prompt: str, max_retries: int = 3) -> str:
     
     while retry_count < max_retries:
         try:
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-2.0-flash")
             response = model.generate_content(prompt)
             
             if not response or not response.text:
@@ -55,4 +55,13 @@ def generate_roadmap(prompt: str, max_retries: int = 3) -> str:
                 time.sleep(2 ** retry_count)  # Exponential backoff
             continue
     
-    raise RoadmapGenerationError(f"Failed to generate roadmap after {max_retries} attempts. Last error: {last_error}")
+    # Try to list models to help debug
+    available_models = []
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                available_models.append(m.name)
+    except Exception as list_err:
+        available_models = [f"Could not list models: {str(list_err)}"]
+    
+    raise RoadmapGenerationError(f"Failed to generate roadmap after {max_retries} attempts. Last error: {last_error}. Available models: {available_models}")
