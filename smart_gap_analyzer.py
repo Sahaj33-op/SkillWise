@@ -24,7 +24,7 @@ def get_smart_gap_analysis(resume_text: str, target_role: str, user_goal: str = 
         raise SmartGapAnalysisError("Gemini API key not configured in session state.")
 
     genai.configure(api_key=st.session_state.gemini_api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash") # Or your preferred model
+    model = genai.GenerativeModel("gemini-2.5-flash-lite") # Or your preferred model
 
     # Step 1: Define what an ideal candidate for the target_role looks like (implicitly or explicitly)
     # For this implementation, we'll use a single, more complex prompt.
@@ -88,3 +88,4 @@ if __name__ == '__main__':
     # except Exception as e:
     #     print(f"An unexpected error occurred: {e}")
     pass
+
